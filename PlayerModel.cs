@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Threading.Tasks;
-
+using System.Collections.Generic;
 
 namespace Game
 {
@@ -26,13 +26,17 @@ namespace Game
         public bool IsMoving { get; private set; }
         private Image specialImg;
         private bool specialActive;
+        private class Popup { public string Text; public Color Color; public long Start; public int Lane; }
+        private readonly List<Popup> popups = new List<Popup>();
+        private const int PopupMs = 1000;
+        private readonly Font popupFont = new Font("Segoe UI", 9, FontStyle.Bold);
         public PlayerModel(string name,Color ModelColor, string dir, string player)
         {
             data = new Special_List().CreatePlayer(name);
             this.ModelColor = ModelColor;
             direction = dir;
             playerNum = player;
-            Size = new Size(100,145);
+            Size = new Size(130, 190);
             DoubleBuffered = true;
             SetStyle(ControlStyles.Selectable, false);
             TabStop = false;
@@ -40,8 +44,7 @@ namespace Game
             BackColor = Color.Transparent;
         }
 
-        private const int BarArea = 45;
-
+        private const int BarArea = 50;
         public void ChangeAttackDir(string dir)
         {
             direction = dir;
@@ -79,80 +82,20 @@ namespace Game
         }
 
         protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
+{
+    base.OnPaint(e);
+    DrawSprite(e.Graphics);
 
-            DrawSprite(e.Graphics);
+    if (DefenseActive)
+    {
+        using (var pen = new Pen(Color.FromArgb(180, Color.Cyan), 3))
+            e.Graphics.DrawEllipse(pen, 2, BarArea, Width - 5, Height - BarArea - 2);
+    }
 
-            DrawStats(e.Graphics);
-        }
+    DrawPopups(e.Graphics);
+}
 
-        private void DrawStats(Graphics g)
-        {
-            
-            Rectangle HealthBar = new Rectangle(0,0,Width,20);
-            float HealthPercent = (float) data.GetHealth()/ data.GetMaxHealth();
-            HealthPercent = Math.Max(0, Math.Min(1f,HealthPercent));
-
-            using(var emptyBrush = new SolidBrush(Color.Red))
-            {
-                g.FillRectangle(emptyBrush, HealthBar);
-            }
-
-            int FilledWidth = (int)(HealthBar.Width * HealthPercent);
-            Rectangle HealthFilledArea = new Rectangle(HealthBar.X,HealthBar.Y,FilledWidth,HealthBar.Height);
-
-            using(var fillBrush = new SolidBrush(Color.Lime))
-            {
-                g.FillRectangle(fillBrush, HealthFilledArea);
-            }
-
-            string Health = $"{data.GetHealth()}/{data.GetMaxHealth()}";
-            SizeF textSize = g.MeasureString(Health,Font);
-            float HtextX = HealthBar.X + (HealthBar.Width - textSize.Width)/2;
-            float HtextY = HealthBar.Y + (HealthBar.Height - textSize.Height)/2;
-            g.DrawString(Health,Font,Brushes.Black,HtextX,HtextY);  
-
-            Rectangle MeterBar = new Rectangle(0,BarArea-25,Width,20);
-            float MeterPercent = (float) data.GetMeter()/data.GetMaxMeter();
-            MeterPercent = Math.Max(0,Math.Min(1f,MeterPercent));
-
-            using(var emptyBrush = new SolidBrush(Color.White))
-            {
-                g.FillRectangle(emptyBrush,MeterBar);
-            }
-
-            int FillMeterWidth = (int)(MeterBar.Width*MeterPercent);
-            Rectangle FillMeterArea = new Rectangle(MeterBar.X,MeterBar.Y,FillMeterWidth,MeterBar.Height);
-
-            using(var fillBrush = new SolidBrush(Color.Yellow))
-            {
-                g.FillRectangle(fillBrush, FillMeterArea);
-            }  
-
-            string Meter = $"{data.GetMeter()}/{data.GetMaxMeter()}";
-            SizeF MeterText = g.MeasureString(Meter,Font);
-            float MtextX  = MeterBar.X + (MeterBar.Width-MeterText.Width)/2;
-            float MtextY  = MeterBar.Y + (MeterBar.Height-MeterText.Height)/2;
-            g.DrawString(Meter,Font,Brushes.Black,MtextX,MtextY);
-
-            // Defense Check
-            string Defense = "";
-            SizeF DefenseText;
-            float DtextX =0;
-            float DtextY =0;
-            if (DefenseActive == true)
-            {
-                Defense = "[DEFENDING]";
-                using(var defenseFont = new Font(Font.FontFamily,7f, FontStyle.Bold))
-                {
-                DefenseText = g.MeasureString(Defense,defenseFont);
-                DtextX =(Width-DefenseText.Width)/2;
-                DtextY =(Height+BarArea-DefenseText.Height)/2;
-                g.DrawString(Defense,defenseFont,Brushes.Black,DtextX,DtextY);
-                }
-            }
-        }
+       
 
         public void checkDefense(long now)
         {
@@ -164,65 +107,103 @@ namespace Game
         }
 
         public void activateDefense(long now)
-        {
-            if(now<data.nextDefendAllowed) return;
-            if(DefenseActive) return;
-            data.TryDefend(now);
-            DefenseActive = true;
-            Invalidate();
-        }
+{
+    if (now < data.nextDefendAllowed)
+    {
+        int secs = (int)Math.Ceiling((data.nextDefendAllowed - now) / 1000.0);
+        ShowPopup($"Defend cooldown {secs}s", Color.Orange);
+        return;
+    }
+    if (DefenseActive) return;
+    data.TryDefend(now);
+    DefenseActive = true;
+    ShowPopup("Defend!", Color.Cyan);
+    Invalidate();
+}
 
         public async void CreateHurtBox(PlayerModel opponent, string attack, long now)
-        {
-            if(attacking == true) return;
-            SetAttackState(true);
-            int damage = 0;
+{
+    if (attacking) return;
 
-            if(attack.Equals("Basic"))
+    int damage;
+    string skillName;
+
+    if (attack.Equals("Basic"))
+    {
+        int hurtX = direction == "Right" ? ActualHitbox.Right : ActualHitbox.Left - 130;
+        HurtBox = new Rectangle(hurtX, ActualHitbox.Y, 130, 130);
+        damage = data.GetBasicDamage();
+        skillName = data.GetBasicName();
+    }
+    else if (attack.Equals("Special"))
+    {
+        if (data.GetMeter() < data.GetSpecialCost())
+        {
+            ShowPopup($"Need {data.GetSpecialCost()} meter", Color.Orange);
+            return;
+        }
+        int hurtX = direction == "Right" ? ActualHitbox.Right : ActualHitbox.Left - data.GetSpecHitBox().Width;
+        int hurtY = ActualHitbox.Y + (ActualHitbox.Height / 2) - (data.GetSpecHitBox().Height / 2);
+        HurtBox = new Rectangle(hurtX, hurtY, data.GetSpecHitBox().Width, data.GetSpecHitBox().Height);
+        damage = data.GetSpecialDamage();
+        skillName = data.GetSpecialName();
+        data.TrySpecialAttack();
+        specialActive = true;
+    }
+    else return;
+
+    SetAttackState(true);
+    ShowPopup(skillName + "!", attack.Equals("Special") ? Color.Gold : Color.White);
+    Invalidate();
+
+    try
+    {
+        if (HurtBox.IntersectsWith(opponent.ActualHitbox))
+        {
+            int dealt = opponent.data.TakeDamage(damage, opponent.DefenseActive);
+            if (dealt != 0)
             {
-                int hurtX = direction == "Right" ? ActualHitbox.Right : ActualHitbox.Left - 100;
-                HurtBox = new Rectangle(hurtX,ActualHitbox.Y,100,100);
-                damage = data.GetBasicDamage();
+                data.GainMeter(2);
+                opponent.data.GainMeter(1);
+                opponent.ShowPopup("-" + dealt, Color.Red);
             }
-            else if(attack.Equals("Special") && data.GetMeter() >= data.GetSpecialCost()) 
+            else
             {
-                int hurtX = direction == "Right" ? ActualHitbox.Right : ActualHitbox.Left - data.GetSpecHitBox().Width;
-                int hurtY = ActualHitbox.Y + (ActualHitbox.Height / 2) - (data.GetSpecHitBox().Height / 2);
-                HurtBox = new Rectangle(hurtX,hurtY,data.GetSpecHitBox().Width,data.GetSpecHitBox().Height);
-                damage = data.GetSpecialDamage();
-                data.TrySpecialAttack();
-                specialActive = true; 
+                opponent.ShowPopup("BLOCKED", Color.Cyan);
             }
             Invalidate();
-            try
-            {
-                if (HurtBox.IntersectsWith(opponent.ActualHitbox))
-                {
-                    int checkdamage = opponent.data.TakeDamage(damage,opponent.DefenseActive);
-                    if(checkdamage != 0)
-                    {
-                    data.GainMeter(2);
-                    opponent.data.GainMeter(1);
-                    }
-                    Invalidate();
-                    opponent.Invalidate();
-                    
-                }
-                await Task.Delay(100);
-            }
-           finally
-            {
-                HurtBox = Rectangle.Empty;
-                SetAttackState(false);
-                specialActive = false;   // <-- new
-                Invalidate();
-            }
+            opponent.Invalidate();
         }
+        await Task.Delay(100);
+    }
+    finally
+    {
+        HurtBox = Rectangle.Empty;
+        SetAttackState(false);
+        specialActive = false;
+        Invalidate();
+    }
+}
 
         public void HealSelf(long now)
-        {
-            data.TryHeal(now);
-        }
+{
+    if (data.GetHealAmount() <= 0) { ShowPopup("No heal", Color.Gray); return; }
+    if (now < data.nextHealAllowed)
+    {
+        int secs = (int)Math.Ceiling((data.nextHealAllowed - now) / 1000.0);
+        ShowPopup($"Heal cooldown {secs}s", Color.Orange);
+        return;
+    }
+    if (data.GetMeter() < data.GetHealCost())
+    {
+        ShowPopup($"Need {data.GetHealCost()} meter", Color.Orange);
+        return;
+    }
+    int before = data.GetHealth();
+    data.TryHeal(now);
+    ShowPopup("+" + (data.GetHealth() - before) + " HP", Color.LimeGreen);
+    Invalidate();
+}
         public void LoadSprites(string stand, string walk, string attack, string special, bool facesRight = true)
 {
     standImg = Image.FromFile(stand);
@@ -239,13 +220,17 @@ public void SetMoving(bool moving)
 
 public void UpdateAnimation()
 {
+    long t = Environment.TickCount64;
+    int removed = popups.RemoveAll(p => t - p.Start >= PopupMs);
+    if (removed > 0 || popups.Count > 0) Invalidate();
+
     if (!IsMoving)
     {
         if (walkFrame) { walkFrame = false; frameCounter = 0; Invalidate(); }
         return;
     }
     frameCounter++;
-    if (frameCounter >= 6)   // lower = faster steps
+    if (frameCounter >= 6)
     {
         frameCounter = 0;
         walkFrame = !walkFrame;
@@ -288,6 +273,35 @@ private void DrawSprite(Graphics g)
     g.DrawImage(img, x, y, w, h);
     g.Restore(state);
 }
-        
+        public void ShowPopup(string text, Color color)
+{
+    long t = Environment.TickCount64;
+    popups.RemoveAll(p => t - p.Start >= PopupMs);
+    if (popups.Exists(p => p.Text == text && t - p.Start < 600)) return; // no spam
+    int lane = Math.Min(popups.Count, 2);
+    popups.Add(new Popup { Text = text, Color = color, Start = t, Lane = lane });
+    Invalidate();
+}
+
+private void DrawPopups(Graphics g)
+{
+    long t = Environment.TickCount64;
+    using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+    {
+        foreach (var p in popups)
+        {
+            float age = (t - p.Start) / (float)PopupMs;
+            if (age >= 1f) continue;
+            int alpha = (int)(255 * (1f - age * age));
+            float y = BarArea - 12 - p.Lane * 18 - age * 10;
+            var rect = new RectangleF(0, y - 9, Width, 18);
+            var shadowRect = new RectangleF(1, y - 8, Width, 18);
+            using (var shadow = new SolidBrush(Color.FromArgb(alpha, 0, 0, 0)))
+                g.DrawString(p.Text, popupFont, shadow, shadowRect, sf);
+            using (var main = new SolidBrush(Color.FromArgb(alpha, p.Color)))
+                g.DrawString(p.Text, popupFont, main, rect, sf);
+        }
+    }
+}
     }
 }

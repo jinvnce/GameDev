@@ -36,3 +36,4 @@ D:\GameDev\bin\Debug\net8.0-windows\assets\map\map1.png
 D:\GameDev\bin\Debug\net8.0-windows\assets\map\map2.png
 D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\bins-rene-special.png
 D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\gab-pred-blue-special.png
+D:\GameDev\obj\Debug\net8.0-windows\GameDev.sourcelink.json

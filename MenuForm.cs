@@ -129,12 +129,21 @@ namespace Game
         }
 
         private void StartGame(string mapPath)
+{
+    var game = new MainGUI(p1Name, p2Name, mapPath, vsComputer);
+    game.FormClosed += (s, e) =>
+    {
+        switch (game.Result)
         {
-            var game = new MainGUI(p1Name, p2Name, mapPath, vsComputer);
-            game.FormClosed += (s, e) => Application.Exit();
-            Hide();
-            game.Show();
+            case "Retry":     StartGame(mapPath); break;
+            case "Character": Show(); ShowCharacterSelect(1); break;
+            case "Map":       Show(); ShowMapSelect(); break;
+            default:          Application.Exit(); break;
         }
+    };
+    Hide();
+    game.Show();
+}
 
         // ---------- Helpers ----------
 
