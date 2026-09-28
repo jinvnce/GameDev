@@ -1,0 +1,28 @@
+C:\School Files\c#\GameDev\bin\Debug\net10.0\GameDev.exe
+C:\School Files\c#\GameDev\bin\Debug\net10.0\GameDev.deps.json
+C:\School Files\c#\GameDev\bin\Debug\net10.0\GameDev.runtimeconfig.json
+C:\School Files\c#\GameDev\bin\Debug\net10.0\GameDev.dll
+C:\School Files\c#\GameDev\bin\Debug\net10.0\GameDev.pdb
+C:\School Files\c#\GameDev\obj\Debug\net10.0\GameDev.GeneratedMSBuildEditorConfig.editorconfig
+C:\School Files\c#\GameDev\obj\Debug\net10.0\GameDev.AssemblyInfoInputs.cache
+C:\School Files\c#\GameDev\obj\Debug\net10.0\GameDev.AssemblyInfo.cs
+C:\School Files\c#\GameDev\obj\Debug\net10.0\GameDev.csproj.CoreCompileInputs.cache
+C:\School Files\c#\GameDev\obj\Debug\net10.0\GameDev.dll
+C:\School Files\c#\GameDev\obj\Debug\net10.0\refint\GameDev.dll
+C:\School Files\c#\GameDev\obj\Debug\net10.0\GameDev.pdb
+C:\School Files\c#\GameDev\obj\Debug\net10.0\GameDev.genruntimeconfig.cache
+C:\School Files\c#\GameDev\obj\Debug\net10.0\ref\GameDev.dll
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\bin\Debug\net10.0\GameDev.exe
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\bin\Debug\net10.0\GameDev.deps.json
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\bin\Debug\net10.0\GameDev.runtimeconfig.json
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\bin\Debug\net10.0\GameDev.dll
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\bin\Debug\net10.0\GameDev.pdb
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\obj\Debug\net10.0\GameDev.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\obj\Debug\net10.0\GameDev.AssemblyInfoInputs.cache
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\obj\Debug\net10.0\GameDev.AssemblyInfo.cs
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\obj\Debug\net10.0\GameDev.csproj.CoreCompileInputs.cache
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\obj\Debug\net10.0\GameDev.dll
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\obj\Debug\net10.0\refint\GameDev.dll
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\obj\Debug\net10.0\GameDev.pdb
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\obj\Debug\net10.0\GameDev.genruntimeconfig.cache
+C:\Users\Gabriel\Desktop\XMAPPBACKUP\xampp\htdocs\GameGUI\GameDev\obj\Debug\net10.0\ref\GameDev.dll
