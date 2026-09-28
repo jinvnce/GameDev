@@ -13,11 +13,11 @@ namespace Game
         private readonly bool vsComputer;
         private readonly HashSet<Keys> heldKeys = new HashSet<Keys>();
         private readonly Random rng = new Random();
-        private long aiNextDecision = 0;
+        private long aiNextDecision = 5;
         private const int AiMoveSpeed = 5;
         private const int AiThinkMin = 250;
         private const int AiThinkMax = 500;
-        private const int AiBasicRange = 110;
+        private const int AiBasicRange = 85;
         private readonly float Gravity = 1.2f;
         private readonly float JumpVelocity = -23f;
         public long now { get; private set; }
@@ -50,11 +50,10 @@ namespace Game
             BackgroundImage = Image.FromFile(mapPath);
             BackgroundImageLayout = ImageLayout.Stretch;
 
-            Controls.Add(p1);
+           
             p1.Location = new Point(100, ClientSize.Height / 2);
             p1.SetGroundY(ClientSize.Height / 2);
 
-            Controls.Add(p2);
             p2.Location = new Point(form_width - 200, ClientSize.Height / 2);
             p2.SetGroundY(ClientSize.Height / 2);
 
@@ -153,20 +152,24 @@ namespace Game
 
         }
 
-        private void PlayerMovement(PlayerModel player, PlayerModel opponent, int x_axis, string dir)
+       private void PlayerMovement(PlayerModel player, PlayerModel opponent, int x_axis, string dir)
+{
+    player.SetMoving(true);
+
+    int dirStep = Math.Sign(x_axis);
+    for (int step = 0; step < Math.Abs(x_axis); step++)
+    {
+        player.Left += dirStep;
+        if (!CanPassThrough(player, opponent) && player.ActualHitbox.IntersectsWith(opponent.ActualHitbox))
         {
-            player.SetMoving(true);
-            player.Left += x_axis;
-
-            if (player.Bounds.IntersectsWith(opponent.Bounds))
-            {
-                player.Left -= x_axis;
-            }
-
-            player.Left = Math.Max(0, Math.Min(player.Left, ClientSize.Width - player.Width));
-            player.ChangeAttackDir(dir);
-
+            player.Left -= dirStep;
+            break;
         }
+    }
+
+    player.Left = Math.Max(0, Math.Min(player.Left, ClientSize.Width - player.Width));
+    player.ChangeAttackDir(dir);
+}
 
         private void PlayerJump(PlayerModel player)
         {
@@ -176,52 +179,40 @@ namespace Game
         }
 
         private void ApplyGravity(PlayerModel player, PlayerModel opponent)
-        {
-            if (!player.OnAir) return;
+{
+    if (!player.OnAir) return;
 
-            player.GravityAdd(Gravity);
-            float movingTop = player.Top + player.VelocitY;
+    player.GravityAdd(Gravity);
+    float movingTop = player.Top + player.VelocitY;
 
-            if (player.ActualHitbox.IntersectsWith(opponent.ActualHitbox))
-            {
-                bool opponentIsRight = opponent.Left > player.Left;
-                int newLeft = player.Left + (opponentIsRight ? -35 : 35);
-                player.Left = Math.Max(0, Math.Min(newLeft, ClientSize.Width - player.Width));
-            }
+    // Only push apart when the jumper is too low to pass through
+    if (!CanPassThrough(player, opponent) && player.ActualHitbox.IntersectsWith(opponent.ActualHitbox))
+        PushOut(player, opponent);
 
+    if (movingTop >= player.GroundY)
+    {
+        player.Top = player.GroundY;
+        player.SetVelocityY(0);
+        player.SetAirState(false);
 
-            if (movingTop >= player.GroundY)
-            {
-                player.Top = player.GroundY;
-                player.SetVelocityY(0);
-                player.SetAirState(false);
-            }
-            else
-            {
-                player.Top = (int)movingTop;
-            }
-        }
+        // Landed: get out of the other player and face them
+        if (!CanPassThrough(player, opponent) && player.ActualHitbox.IntersectsWith(opponent.ActualHitbox))
+            PushOut(player, opponent);
+        player.ChangeAttackDir(CenterX(opponent) > CenterX(player) ? "Right" : "Left");
+    }
+    else
+    {
+        player.Top = (int)movingTop;
+    }
+}
 
         protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-            DrawHud(e.Graphics);
-            if (p1.HurtBox != Rectangle.Empty)
-            {
-                using (var hitboxPen = new Pen(Color.Red))
-                {
-                    e.Graphics.DrawRectangle(hitboxPen, p1.HurtBox);
-                }
-            }
-
-            if (p2.HurtBox != Rectangle.Empty)
-            {
-                using (var hitboxPen = new Pen(Color.Red))
-                {
-                    e.Graphics.DrawRectangle(hitboxPen, p2.HurtBox);
-                }
-            }
-        }
+{
+    base.OnPaint(e);
+    p1.Render(e.Graphics);
+    p2.Render(e.Graphics);
+    DrawHud(e.Graphics);
+}
 
         private void ComputerTurn()
         {
@@ -235,14 +226,11 @@ namespace Game
                 ? target.ActualHitbox.Left - cpu.ActualHitbox.Right
                 : cpu.ActualHitbox.Left - target.ActualHitbox.Right;
 
-            // Always face the player
             if (cpu.direction != toward) cpu.ChangeAttackDir(toward);
 
-            // Walk toward the player until in attack range
             if (gap > AiBasicRange - 20)
                 PlayerMovement(cpu, target, targetIsRight ? AiMoveSpeed : -AiMoveSpeed, toward);
 
-            // Make one decision every few hundred milliseconds
             if (now < aiNextDecision) return;
             aiNextDecision = now + rng.Next(AiThinkMin, AiThinkMax);
 
@@ -364,7 +352,6 @@ private void DrawHud(Graphics g)
     Rectangle mp1 = new Rectangle(20, 66, 200, 14);
     Rectangle mp2 = new Rectangle(w - 220, 66, 200, 14);
 
-    // Health bars (true/false = which side the bar is anchored to; swap to reverse)
     DrawBar(g, hp1, HealthFraction(p1), lag1, Color.Gold, true);
     DrawBar(g, hp2, HealthFraction(p2), lag2, Color.Gold, false);
     DrawText(g, p1.data.GetHealth() + "/" + p1.data.GetMaxHealth(), hp1, hudFont, StringAlignment.Center);
@@ -427,6 +414,29 @@ private void DrawText(Graphics g, string text, Rectangle r, Font f, StringAlignm
         g.DrawString(text, f, Brushes.Black, new Rectangle(r.X + 1, r.Y + 1, r.Width, r.Height), sf);
         g.DrawString(text, f, Brushes.White, r, sf);
     }
+}
+
+private const int CrossHeight = 80;   // how high (px) a jumper must be to pass through the other player
+
+private bool CanPassThrough(PlayerModel a, PlayerModel b)
+{
+    return (a.OnAir && a.GroundY - a.Top >= CrossHeight)
+        || (b.OnAir && b.GroundY - b.Top >= CrossHeight);
+}
+
+private int CenterX(PlayerModel p)
+{
+    return p.ActualHitbox.Left + p.ActualHitbox.Width / 2;
+}
+
+// Moves a player sideways out of the other one, toward the side they are on
+private void PushOut(PlayerModel player, PlayerModel opponent)
+{
+    int step = CenterX(opponent) > CenterX(player) ? -1 : 1;
+    int guard = 0;
+    while (player.ActualHitbox.IntersectsWith(opponent.ActualHitbox) && guard++ < 600)
+        player.Left += step;
+    player.Left = Math.Max(0, Math.Min(player.Left, ClientSize.Width - player.Width));
 }
     }
 }

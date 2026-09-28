@@ -16,8 +16,21 @@ namespace Game
         public float VelocitY {get; private set;}
         public int GroundY {get; private set;}
         private Color ModelColor {get; set;}
-        public Rectangle ActualHitbox => new Rectangle(Left,Top+BarArea,Width,Height-BarArea);
+private const float BodyFit = 1.0f;   // 1.0 = full sprite width; lower = characters overlap more
+
+private int BodyWidth
+{
+    get
+    {
+        if (standImg == null) return Width;
+        float scale = Math.Min((float)Width / standImg.Width, (float)(Height - BarArea) / standImg.Height);
+        return (int)(standImg.Width * scale * BodyFit);
+    }
+}
+
+public Rectangle ActualHitbox => new Rectangle(Left + (Width - BodyWidth) / 2, Top + BarArea, BodyWidth, Height - BarArea);        
         public Rectangle HurtBox {get; private set;}
+        private const int BasicReach = 100;   // was 130, lower = shorter attack
         public bool DefenseActive{get; private set;}
         private Image standImg, walkImg, attackImg;
         private bool spritesFaceRight = true;
@@ -36,7 +49,7 @@ namespace Game
             this.ModelColor = ModelColor;
             direction = dir;
             playerNum = player;
-            Size = new Size(130, 190);
+            Size = new Size(280, 300);
             DoubleBuffered = true;
             SetStyle(ControlStyles.Selectable, false);
             TabStop = false;
@@ -81,22 +94,26 @@ namespace Game
             VelocitY += Gravity;
         }
 
-        protected override void OnPaint(PaintEventArgs e)
+        public void Render(Graphics g)
 {
-    base.OnPaint(e);
-    DrawSprite(e.Graphics);
+    var state = g.Save();
+    g.TranslateTransform(Left, Top);
+
+    DrawSprite(g);
 
     if (DefenseActive)
     {
-        using (var pen = new Pen(Color.FromArgb(180, Color.Cyan), 3))
-            e.Graphics.DrawEllipse(pen, 2, BarArea, Width - 5, Height - BarArea - 2);
+        int bw = BodyWidth;
+        var shield = new Rectangle((Width - bw) / 2 - 6, BarArea - 4, bw + 12, Height - BarArea + 4);
+        using (var fill = new SolidBrush(Color.FromArgb(50, Color.Cyan)))
+            g.FillEllipse(fill, shield);
+        using (var pen = new Pen(Color.FromArgb(200, Color.Cyan), 3))
+            g.DrawEllipse(pen, shield);
     }
 
-    DrawPopups(e.Graphics);
+    DrawPopups(g);
+    g.Restore(state);
 }
-
-       
-
         public void checkDefense(long now)
         {
             if (!data.IsDefendingNow(now))
@@ -130,8 +147,8 @@ namespace Game
 
     if (attack.Equals("Basic"))
     {
-        int hurtX = direction == "Right" ? ActualHitbox.Right : ActualHitbox.Left - 130;
-        HurtBox = new Rectangle(hurtX, ActualHitbox.Y, 130, 130);
+       int hurtX = direction == "Right" ? ActualHitbox.Right : ActualHitbox.Left - BasicReach;
+HurtBox = new Rectangle(hurtX, ActualHitbox.Y, BasicReach, 130);
         damage = data.GetBasicDamage();
         skillName = data.GetBasicName();
     }
@@ -248,7 +265,7 @@ private Image GetCurrentSprite()
 private void DrawSprite(Graphics g)
 {
     Image img = GetCurrentSprite();
-    if (img == null)   // no image loaded, keep the old rectangle
+    if (img == null)   
     {
         using (var b = new SolidBrush(ModelColor))
             g.FillRectangle(b, 0, BarArea, Width, Height - BarArea);
@@ -260,7 +277,7 @@ private void DrawSprite(Graphics g)
     int w = (int)(img.Width * scale);
     int h = (int)(img.Height * scale);
     int x = (Width - w) / 2;
-    int y = Height - h;   // feet at the bottom of the hitbox
+    int y = Height - h;   
 
     bool flip = (direction == "Left") == spritesFaceRight;
     var state = g.Save();

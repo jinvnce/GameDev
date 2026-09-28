@@ -7,7 +7,6 @@ using System.Windows.Forms;
 
 namespace Game
 {
-    // Character name (must match Special_List) -> file prefix in assets\avatar
     public static class Roster
     {
         public static readonly Dictionary<string, string> Sprites = new Dictionary<string, string>
@@ -37,7 +36,7 @@ namespace Game
 
         public MenuForm()
         {
-            Text = "Game Title";
+            Text = "Pinoy Brawl";
             ClientSize = new Size(800, 600);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
@@ -59,12 +58,10 @@ namespace Game
             ShowMainMenu();
         }
 
-        // ---------- Screens ----------
-
         private void ShowMainMenu()
         {
             Clear();
-            AddTitle("GAME TITLE", 120, 40);
+            AddTitle("PINOY BRAWL", 120, 40);
             AddButton("Start Game", 300, ShowModeMenu);
             AddButton("Quit", 370, () => Application.Exit());
         }
@@ -89,7 +86,7 @@ namespace Game
             var tiles = new List<Control>();
             foreach (string name in Roster.Sprites.Keys)
             {
-                string n = name; // copy for the click handler
+                string n = name; 
                 tiles.Add(MakeTile(Roster.SpritePath(n, "idle"), n, 180, 260, () =>
                 {
                     if (player == 1) { p1Name = n; ShowCharacterSelect(2); }
@@ -144,8 +141,6 @@ namespace Game
     Hide();
     game.Show();
 }
-
-        // ---------- Helpers ----------
 
         private static bool IsImage(string path)
         {
@@ -229,7 +224,6 @@ namespace Game
             return tile;
         }
 
-        // Centers tiles in rows of "perRow"
         private void PlaceGrid(List<Control> tiles, int top, int perRow)
         {
             const int gap = 20;
