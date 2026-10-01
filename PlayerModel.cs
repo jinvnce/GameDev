@@ -16,7 +16,7 @@ namespace Game
         public float VelocitY {get; private set;}
         public int GroundY {get; private set;}
         private Color ModelColor {get; set;}
-private const float BodyFit = 1.0f;   // 1.0 = full sprite width; lower = characters overlap more
+private const float BodyFit = 1.0f;   
 
 private int BodyWidth
 {
@@ -30,7 +30,7 @@ private int BodyWidth
 
 public Rectangle ActualHitbox => new Rectangle(Left + (Width - BodyWidth) / 2, Top + BarArea, BodyWidth, Height - BarArea);        
         public Rectangle HurtBox {get; private set;}
-        private const int BasicReach = 100;   // was 130, lower = shorter attack
+        private const int BasicReach = 100;  
         public bool DefenseActive{get; private set;}
         private Image standImg, walkImg, attackImg;
         private bool spritesFaceRight = true;
@@ -42,6 +42,8 @@ public Rectangle ActualHitbox => new Rectangle(Left + (Width - BodyWidth) / 2, T
         private class Popup { public string Text; public Color Color; public long Start; public int Lane; }
         private readonly List<Popup> popups = new List<Popup>();
         private const int PopupMs = 1000;
+        private Image jumpImg;
+private long landSquashUntil;
         private readonly Font popupFont = new Font("Segoe UI", 9, FontStyle.Bold);
         public PlayerModel(string name,Color ModelColor, string dir, string player)
         {
@@ -70,9 +72,10 @@ public Rectangle ActualHitbox => new Rectangle(Left + (Width - BodyWidth) / 2, T
         }
 
         public void SetAirState(bool state)
-        {
-            OnAir = state;
-        }
+{
+    if (OnAir && !state) landSquashUntil = Environment.TickCount64 + 120;   
+    OnAir = state;
+}
         public String InitializeInfo()
         {
             string text = $"=====================\nName: {data.GetCharacter()}\nHP: {data.GetHealth()}\nMeter:{data.GetMeter()}\n=====================\n";
@@ -221,15 +224,15 @@ HurtBox = new Rectangle(hurtX, ActualHitbox.Y, BasicReach, 130);
     ShowPopup("+" + (data.GetHealth() - before) + " HP", Color.LimeGreen);
     Invalidate();
 }
-        public void LoadSprites(string stand, string walk, string attack, string special, bool facesRight = true)
+        public void LoadSprites(string stand, string walk, string attack, string special, string jump = null, bool facesRight = true)
 {
     standImg = Image.FromFile(stand);
     walkImg = Image.FromFile(walk);
     attackImg = Image.FromFile(attack);
     specialImg = Image.FromFile(special);
+    jumpImg = (jump != null && System.IO.File.Exists(jump)) ? Image.FromFile(jump) : null;
     spritesFaceRight = facesRight;
 }
-
 public void SetMoving(bool moving)
 {
     IsMoving = moving;
@@ -258,6 +261,7 @@ public void UpdateAnimation()
 private Image GetCurrentSprite()
 {
     if (attacking) return specialActive ? specialImg : attackImg;
+    if (OnAir && jumpImg != null) return jumpImg;
     if (IsMoving && walkFrame) return walkImg;
     return standImg;
 }
@@ -265,7 +269,7 @@ private Image GetCurrentSprite()
 private void DrawSprite(Graphics g)
 {
     Image img = GetCurrentSprite();
-    if (img == null)   
+    if (img == null)
     {
         using (var b = new SolidBrush(ModelColor))
             g.FillRectangle(b, 0, BarArea, Width, Height - BarArea);
@@ -274,10 +278,24 @@ private void DrawSprite(Graphics g)
 
     int areaH = Height - BarArea;
     float scale = Math.Min((float)Width / img.Width, (float)areaH / img.Height);
-    int w = (int)(img.Width * scale);
-    int h = (int)(img.Height * scale);
+
+    float sx = 1f, sy = 1f;
+    if (OnAir && img == jumpImg)
+    {
+        float v = Math.Min(1f, Math.Abs(VelocitY) / 23f);
+        sy = 1f + v * 0.08f;
+        sx = 1f - v * 0.05f;
+    }
+    else if (!OnAir && Environment.TickCount64 < landSquashUntil)
+    {
+        sy = 0.92f;
+        sx = 1.06f;
+    }
+
+    int w = (int)(img.Width * scale * sx);
+    int h = (int)(img.Height * scale * sy);
     int x = (Width - w) / 2;
-    int y = Height - h;   
+    int y = Height - h;
 
     bool flip = (direction == "Left") == spritesFaceRight;
     var state = g.Save();
@@ -294,7 +312,7 @@ private void DrawSprite(Graphics g)
 {
     long t = Environment.TickCount64;
     popups.RemoveAll(p => t - p.Start >= PopupMs);
-    if (popups.Exists(p => p.Text == text && t - p.Start < 600)) return; // no spam
+    if (popups.Exists(p => p.Text == text && t - p.Start < 600)) return; 
     int lane = Math.Min(popups.Count, 2);
     popups.Add(new Popup { Text = text, Color = color, Start = t, Lane = lane });
     Invalidate();

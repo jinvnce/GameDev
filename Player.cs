@@ -209,5 +209,11 @@ namespace Game
                 Meter = MaxMeter;
             }
         }
+
+        public void Restore()
+{
+    Health = MaxHealth;
+    Meter = MaxMeter;
+}
     }
 }

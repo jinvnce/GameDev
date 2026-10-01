@@ -62,3 +62,8 @@ C:\School Files\c#\GameDev\obj\Debug\net8.0-windows\refint\GameDev.dll
 C:\School Files\c#\GameDev\obj\Debug\net8.0-windows\GameDev.pdb
 C:\School Files\c#\GameDev\obj\Debug\net8.0-windows\GameDev.genruntimeconfig.cache
 C:\School Files\c#\GameDev\obj\Debug\net8.0-windows\ref\GameDev.dll
+D:\GameDev\bin\Debug\net8.0-windows\assets\map\map3.png
+D:\GameDev\bin\Debug\net8.0-windows\assets\menu\menu-bg.png
+D:\GameDev\bin\Debug\net8.0-windows\assets\select\select-bg.png
+D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\bins-rene-jump.png
+D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\gab-pred-blue-jump.png
