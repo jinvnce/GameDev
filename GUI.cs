@@ -13,7 +13,7 @@ namespace Game
         private readonly bool vsComputer;
         private readonly HashSet<Keys> heldKeys = new HashSet<Keys>();
         private readonly Random rng = new Random();
-        private long aiNextDecision = 5;
+        private long aiNextDecision = 0;
         private const int AiMoveSpeed = 5;
         private const int AiThinkMin = 250;
         private const int AiThinkMax = 500;

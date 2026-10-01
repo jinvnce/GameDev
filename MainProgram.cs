@@ -5,7 +5,6 @@ namespace Game
         [STAThread]
         public static void Main()
         {
-
             ApplicationConfiguration.Initialize();
             Application.Run(new MenuForm());
         }
