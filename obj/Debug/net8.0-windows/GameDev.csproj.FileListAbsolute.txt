@@ -67,3 +67,13 @@ D:\GameDev\bin\Debug\net8.0-windows\assets\menu\menu-bg.png
 D:\GameDev\bin\Debug\net8.0-windows\assets\select\select-bg.png
 D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\bins-rene-jump.png
 D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\gab-pred-blue-jump.png
+C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\bins-rene-jump.png
+C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\gab-pred-blue-jump.png
+C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\Rene.jpg
+C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\map\map3.png
+C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\menu\menu-bg.png
+C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\select\select-bg.png
+C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\bins-rene-sheet.png
+C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\bins-rene-trail.png
+C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\gab-pred-blue-sheet.png
+C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\gab-pred-blue-trail.png

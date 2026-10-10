@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Reflection;
 using System.Collections.Generic;
 using System.Windows.Forms;
@@ -28,29 +29,49 @@ namespace Game
         private bool paused;
         private long pausedAt;
         private Panel pausePanel;
+
+        // keyboard navigation for the pause / end-of-match panels
+        private readonly List<GameButton> panelButtons = new List<GameButton>();
+        private readonly List<Action> panelActions = new List<Action>();
+        private int panelIndex;
+
+        // "are you sure?" dialog that sits on top of the pause / end panel
+        private Panel confirmPanel;
+        private List<GameButton> savedButtons;
+        private List<Action> savedActions;
+        private int savedIndex;
         public string Result { get; private set; } = "Quit";
         private long roundEndsAt;
-        private float lag1 = 1f, lag2 = 1f;
+        private readonly BarFx fx1 = new BarFx(), fx2 = new BarFx();
+        private readonly Font keyFont = Theme.Body(8, FontStyle.Bold);
+        private readonly Font chipFont = Theme.Body(9, FontStyle.Bold);
+        private readonly Font calloutFont = Theme.Display(38);
+        private readonly Font calloutSubFont = Theme.Display(12);
+        private static readonly Color ChipGrey = Color.FromArgb(210, 210, 215);
+        private class Callout { public string Title, Sub; public Color Accent; public long Start; }
+        private Callout callout;
+        private const int CalloutMs = 1100;
         private readonly Dictionary<PlayerModel, int> jumpStartX = new Dictionary<PlayerModel, int>();
         private readonly HashSet<PlayerModel> airMoved = new HashSet<PlayerModel>();
-        private readonly Font hudFont = new Font("Segoe UI", 9, FontStyle.Bold);
-        private readonly Font nameFont = new Font("Segoe UI", 11, FontStyle.Bold);
-        private readonly Font timerFont = new Font("Segoe UI", 28, FontStyle.Bold);
-        private readonly Font smallFont = new Font("Segoe UI", 7, FontStyle.Bold);
-        private readonly Font tagFont = new Font("Segoe UI", 9, FontStyle.Bold);
-        private readonly Font roundFont = new Font("Segoe UI", 9, FontStyle.Bold);
-        private readonly Font bannerFont = new Font("Segoe UI", 30, FontStyle.Bold);
+        private readonly Font hudFont    = Theme.Body(11, FontStyle.Bold);
+        private readonly Font nameFont   = Theme.Display(11);
+        private readonly Font timerFont  = Theme.Display(28);
+        private readonly Font smallFont  = Theme.Body(8, FontStyle.Bold);
+        private readonly Font tagFont    = Theme.Display(9);
+        private readonly Font roundFont  = Theme.Display(9);
+        private readonly Font bannerFont = Theme.Display(30);
         private int p1Wins, p2Wins;
         private int currentRound = 1;
-        private readonly int winsNeeded;      
-        private bool intermission;            
+        private readonly int winsNeeded;
+        private bool intermission;
         private long intermissionEnds;
-        private string banner;               
+        private string banner;
         private const int GameW = 800, GameH = 600;
+        private const int SpawnMargin = 100; // distance from screen edge to the character body
         private Image mapImage;
         private Panel endPanel;
         public FormWindowState EndState { get; private set; } = FormWindowState.Normal;
-        public Size EndClientSize { get; private set; } = new Size(800, 600);
+        public Size EndClientSize { get; private set; } = new Size(1200, 900);
 
         public MainGUI(string p1Name, string p2Name, string mapPath, bool vsComputer, bool practice = false)
         {
@@ -63,26 +84,26 @@ namespace Game
             p2 = new PlayerModel(p2Name, Color.Red, "Left", "P2");
 
             Text = "Pinoy Brawler";
-            ClientSize = new Size(GameW, GameH);
+            ClientSize = new Size(GameW * 3 / 2, GameH * 3 / 2);   // 1200 x 900
             MinimumSize = SizeFromClientSize(new Size(400, 300));
             DoubleBuffered = true;
             ResizeRedraw = true;
-            BackColor = Color.Black;   
+            BackColor = Color.Black;
             CenterToScreen();
-            int form_width = GameW;
 
-            mapImage = LoadImage(mapPath);  
+            mapImage = LoadImage(mapPath);
 
-            p1.Location = new Point(100, GameH / 2);
             p1.SetGroundY(GameH / 2);
-
-            p2.Location = new Point(form_width - 200, GameH / 2);
             p2.SetGroundY(GameH / 2);
 
-            p1.LoadSprites(Roster.SpritePath(p1Name, "idle"), Roster.SpritePath(p1Name, "walk"),
-            Roster.SpritePath(p1Name, "basic"), Roster.SpecialPath(p1Name), Roster.JumpPath(p1Name));
-            p2.LoadSprites(Roster.SpritePath(p2Name, "idle"), Roster.SpritePath(p2Name, "walk"),
-            Roster.SpritePath(p2Name, "basic"), Roster.SpecialPath(p2Name), Roster.JumpPath(p2Name));
+            LoadVisuals(p1, p1Name);
+            LoadVisuals(p2, p2Name);
+
+            p1.SpecialUsed += skill => TriggerSpecial(p1, skill);
+            p2.SpecialUsed += skill => TriggerSpecial(p2, skill);
+
+            // must come after LoadVisuals: the body width is only known once sprites are loaded
+            ResetPositions();
 
             KeyPreview = true;
             KeyDown += (s, e) => heldKeys.Add(e.KeyCode);
@@ -98,6 +119,43 @@ namespace Game
                 EndClientSize = ClientSize;
             };
             FormClosed += (s, e) => { mapImage?.Dispose(); mapImage = null; };
+        }
+
+        // ---------- positioning helpers ----------
+
+        // empty space between the control's left edge and the visible body
+        private int SideGap(PlayerModel p)
+        {
+            return p.ActualHitbox.Left - p.Left;
+        }
+
+        // keep the visible body (not the whole control) inside the screen
+        private void ClampToScreen(PlayerModel p)
+        {
+            int gap = SideGap(p);
+            p.Left = Math.Max(-gap, Math.Min(p.Left, GameW - p.Width + gap));
+        }
+
+        // mirrored spawn: each body starts SpawnMargin px from its own edge
+        private void ResetPositions()
+        {
+            p1.Left = SpawnMargin - SideGap(p1);
+            p1.Top = GameH / 2;
+
+            p2.Left = GameW - SpawnMargin - p2.ActualHitbox.Width - SideGap(p2);
+            p2.Top = GameH / 2;
+        }
+
+        private void LoadVisuals(PlayerModel p, string name)
+        {
+            string idle = Roster.SpritePath(name, "idle");
+            string sheetPath = idle.Replace("-idle.png", "-sheet.png");
+
+            if (System.IO.File.Exists(sheetPath))
+                p.LoadSheet(sheetPath);
+            else
+                p.LoadSprites(idle, Roster.SpritePath(name, "walk"),
+                              Roster.SpritePath(name, "basic"), Roster.SpecialPath(name), Roster.JumpPath(name));
         }
 
         private void gameLoop_Tick(object sender, EventArgs e)
@@ -130,7 +188,7 @@ namespace Game
             {
                 ComputerTurn();
             }
-            else if (!practice)  
+            else if (!practice)
             {
                 if (heldKeys.Contains(k2["Left"])) PlayerMovement(p2, p1, -movement, "Left");
                 if (heldKeys.Contains(k2["Right"])) PlayerMovement(p2, p1, movement, "Right");
@@ -142,14 +200,14 @@ namespace Game
             ApplyGravity(p1, p2);
             ApplyGravity(p2, p1);
 
+            UpdateBarFx(fx1, p1, !practice);
+            UpdateBarFx(fx2, p2, true);
+
             if (practice)
             {
                 p1.data.Restore();
                 if (p2.data.GetHealth() < p2.data.GetMaxHealth() * 0.3f) p2.data.Restore();
             }
-
-            lag1 = EaseLag(lag1, HealthFraction(p1));
-            lag2 = EaseLag(lag2, HealthFraction(p2));
 
             if (!practice && (!p1.data.IsAlive() || !p2.data.IsAlive() || now >= roundEndsAt)) EndRound();
         }
@@ -157,7 +215,7 @@ namespace Game
         private void PlayerActions(object sender, KeyEventArgs e)
         {
             Keys k = e.KeyCode;
-            if (k == Keys.Escape) { TogglePause(); return; }
+            if (k == Keys.Escape) { if (confirmPanel != null) CancelConfirm(); else TogglePause(); return; }
             if (gameOver || paused || intermission) return;
 
             var k1 = Settings.P1Keys;
@@ -234,21 +292,21 @@ namespace Game
             p1.data.Restore();
             p2.data.Restore();
 
-            p1.Location = new Point(100, GameH / 2);
-            p2.Location = new Point(GameW - 200, GameH / 2);
             p1.SetAirState(false); p1.SetVelocityY(0);
             p2.SetAirState(false); p2.SetVelocityY(0);
             p1.ChangeAttackDir("Right");
             p2.ChangeAttackDir("Left");
+            ResetPositions();
 
-            lag1 = 1f;
-            lag2 = 1f;
+            ResetFx(fx1);
+            ResetFx(fx2);
+            callout = null;
 
             now = Environment.TickCount64;
             roundEndsAt = now + Settings.RoundSeconds * 1000;
             aiNextDecision = now + 500;
         }
-        
+
         private void TogglePause()
         {
             if (gameOver) return;
@@ -264,10 +322,11 @@ namespace Game
             p2.SetMoving(false);
 
             pausePanel = MakePanel("PAUSED");
-            AddPanelButton(pausePanel, "Resume", 100, ResumeGame);
-            AddResultButton(pausePanel, "Change Character", 170, "Character");
-            AddResultButton(pausePanel, "Change Map", 240, "Map");
-            AddResultButton(pausePanel, "Main Menu", 310, "Menu");
+            AddPanelButton(pausePanel, "Resume", 96, ResumeGame);
+            AddConfirmButton(pausePanel, "Change Character", 152, "Character");
+            AddConfirmButton(pausePanel, "Change Map", 208, "Map");
+            AddConfirmButton(pausePanel, "Main Menu", 264, "Menu");
+            AddConfirmButton(pausePanel, "Quit", 320, "Quit");
 
             Controls.Add(pausePanel);
             pausePanel.BringToFront();
@@ -276,20 +335,21 @@ namespace Game
         private void ResumeGame()
         {
             long delta = Environment.TickCount64 - pausedAt;
-            roundEndsAt += delta;            
+            roundEndsAt += delta;
             intermissionEnds += delta;
             paused = false;
+            panelButtons.Clear();
+            panelActions.Clear();
             Controls.Remove(pausePanel);
             pausePanel.Dispose();
             pausePanel = null;
             Focus();
         }
 
-
         private void PlayerMovement(PlayerModel player, PlayerModel opponent, int x_axis, string dir)
         {
             player.SetMoving(true);
-            if (player.OnAir) airMoved.Add(player);  
+            if (player.OnAir) airMoved.Add(player);
 
             int dirStep = Math.Sign(x_axis);
             for (int step = 0; step < Math.Abs(x_axis); step++)
@@ -302,14 +362,14 @@ namespace Game
                 }
             }
 
-            player.Left = Math.Max(0, Math.Min(player.Left, GameW - player.Width));
+            ClampToScreen(player);
             player.ChangeAttackDir(dir);
         }
 
         private void PlayerJump(PlayerModel player)
         {
             if (player.OnAir == true) return;
-            jumpStartX[player] = player.Left;  
+            jumpStartX[player] = player.Left;
             airMoved.Remove(player);
             player.SetAirState(true);
             player.SetVelocityY(JumpVelocity);
@@ -364,17 +424,59 @@ namespace Game
             p1.Render(g);
             p2.Render(g);
             DrawHud(g);
+            DrawCallout(g);
 
             if (banner != null)
                 DrawText(g, banner, new Rectangle(0, 220, GameW, 80), bannerFont, StringAlignment.Center);
         }
 
+        // While the pause or end panel is open, keys drive the panel instead of the fighters
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if ((paused || gameOver) && panelButtons.Count > 0)
+            {
+                Keys k = keyData & Keys.KeyCode;
+                bool shift = (keyData & Keys.Shift) == Keys.Shift;
+
+                switch (k)
+                {
+                    case Keys.Tab:
+                        MovePanel(shift ? -1 : 1);
+                        return true;
+                    case Keys.Down:
+                    case Keys.Right:
+                    case Keys.S:
+                    case Keys.D:
+                        MovePanel(1);
+                        return true;
+                    case Keys.Up:
+                    case Keys.Left:
+                    case Keys.W:
+                    case Keys.A:
+                        MovePanel(-1);
+                        return true;
+                    case Keys.Enter:
+                    case Keys.Space:
+                        panelActions[panelIndex]();
+                        return true;
+                }
+            }
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        private void MovePanel(int d)
+        {
+            int n = panelButtons.Count;
+            panelIndex = ((panelIndex + d) % n + n) % n;   // wrap around
+            for (int i = 0; i < n; i++) panelButtons[i].Active = (i == panelIndex);
+        }
+
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
-            Panel p = pausePanel ?? endPanel;
-            if (p != null)
-                p.Location = new Point((ClientSize.Width - p.Width) / 2, (ClientSize.Height - p.Height) / 2);
+            foreach (Panel p in new[] { pausePanel, endPanel, confirmPanel })
+                if (p != null)
+                    p.Location = new Point((ClientSize.Width - p.Width) / 2, (ClientSize.Height - p.Height) / 2);
             Invalidate();
         }
 
@@ -430,7 +532,6 @@ namespace Game
             if (gap < 200 && rng.Next(100) < 10) PlayerJump(cpu);
         }
 
-
         private void EndGame(string text)
         {
             gameOver = true;
@@ -439,52 +540,156 @@ namespace Game
 
             var panel = MakePanel(text);
             endPanel = panel;
-            AddResultButton(panel, "Retry", 100, "Retry");
-            AddResultButton(panel, "Change Character", 170, "Character");
-            AddResultButton(panel, "Change Map", 240, "Map");
-            AddResultButton(panel, "Quit", 310, "Quit");
+            AddResultButton(panel, "Retry", 96, "Retry");
+            AddConfirmButton(panel, "Change Character", 152, "Character");
+            AddConfirmButton(panel, "Change Map", 208, "Map");
+            AddConfirmButton(panel, "Main Menu", 264, "Menu");
+            AddConfirmButton(panel, "Quit", 320, "Quit");
 
             Controls.Add(panel);
             panel.BringToFront();
         }
 
-        private Panel MakePanel(string titleText)
+        private Panel MakePanel(string titleText, int height = 420, string hintText = "Tab / Arrows: Move     Enter / Space: Select")
         {
-            var panel = new Panel
-            {
-                Size = new Size(360, 380),
-                BackColor = Color.FromArgb(40, 40, 40)
-            };
+            panelButtons.Clear();
+            panelActions.Clear();
+            panelIndex = 0;
+
+            var panel = new Panel { Size = new Size(360, height), BackColor = Theme.Panel };
             panel.Location = new Point((ClientSize.Width - panel.Width) / 2,
                                        (ClientSize.Height - panel.Height) / 2);
+            panel.Paint += (s, e) =>
+            {
+                using (var p = new Pen(Theme.Accent, 2))
+                    e.Graphics.DrawRectangle(p, 1, 1, panel.Width - 3, panel.Height - 3);
+            };
 
             var title = new Label
             {
                 Text = titleText,
-                Font = new Font("Segoe UI", 20, FontStyle.Bold),
-                ForeColor = Color.White,
+                Font = Theme.Display(20),
+                ForeColor = Theme.Text,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Size = new Size(panel.Width, 80),
                 Location = new Point(0, 10)
             };
             panel.Controls.Add(title);
+
+            var hint = new Label
+            {
+                Text = hintText,
+                Font = Theme.Body(8, FontStyle.Bold),
+                ForeColor = Theme.Muted,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Size = new Size(panel.Width, 18),
+                Location = new Point(0, panel.Height - 26)
+            };
+            panel.Controls.Add(hint);
             return panel;
         }
 
         private void AddPanelButton(Panel panel, string text, int y, Action onClick)
         {
-            var btn = new Button
+            var btn = new GameButton
             {
                 Text = text,
-                Font = new Font("Segoe UI", 12, FontStyle.Bold),
-                Size = new Size(240, 50),
-                Location = new Point((panel.Width - 240) / 2, y),
-                BackColor = Color.White,
-                FlatStyle = FlatStyle.Flat,
-                TabStop = false
+                Font = Theme.Display(12),
+                Size = new Size(260, 46),
+                Location = new Point((panel.Width - 260) / 2, y)
             };
-            btn.Click += (s, e) => onClick();
+            int idx = panelButtons.Count;
+            panelButtons.Add(btn);
+            panelActions.Add(onClick);
+            btn.Active = idx == panelIndex;
+            btn.Click += (s, e) => { panelIndex = idx; onClick(); };
             panel.Controls.Add(btn);
+        }
+
+        // button that asks "are you sure?" before leaving the match
+        private void AddConfirmButton(Panel panel, string text, int y, string result)
+        {
+            AddPanelButton(panel, text, y, () => ShowConfirm(result));
+        }
+
+        private void ShowConfirm(string result)
+        {
+            Panel behind = pausePanel ?? endPanel;
+            if (behind == null || confirmPanel != null) return;
+
+            string note = gameOver ? "" : " Your current match will be lost.";
+            string message, yesText;
+            switch (result)
+            {
+                case "Character":
+                    message = "Are you sure you want to change your character?" + note;
+                    yesText = "Yes, change character";
+                    break;
+                case "Map":
+                    message = "Are you sure you want to change the map?" + note;
+                    yesText = "Yes, change map";
+                    break;
+                case "Menu":
+                    message = "Are you sure you want to go back to the main menu?" + note;
+                    yesText = "Yes, go to main menu";
+                    break;
+                default:
+                    message = "Are you sure you want to exit the game?";
+                    yesText = "Yes, exit game";
+                    break;
+            }
+
+            // remember the panel underneath so Cancel can bring it back exactly as it was
+            savedButtons = new List<GameButton>(panelButtons);
+            savedActions = new List<Action>(panelActions);
+            savedIndex = panelIndex;
+            behind.Visible = false;
+
+            confirmPanel = MakePanel("ARE YOU SURE?", 320, "Tab / Arrows: Move     Enter / Space: Select     Esc: Cancel");
+
+            var msg = new Label
+            {
+                Text = message,
+                Font = Theme.Body(11, FontStyle.Bold),
+                ForeColor = Theme.Text,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Size = new Size(confirmPanel.Width - 40, 70),
+                Location = new Point(20, 96)
+            };
+            confirmPanel.Controls.Add(msg);
+
+            // "No" comes first so it is the default choice
+            AddPanelButton(confirmPanel, "No, go back", 176, CancelConfirm);
+            AddPanelButton(confirmPanel, yesText, 232, () => { Result = result; Close(); });
+
+            Controls.Add(confirmPanel);
+            confirmPanel.BringToFront();
+        }
+
+        private void CancelConfirm()
+        {
+            if (confirmPanel == null) return;
+
+            Controls.Remove(confirmPanel);
+            confirmPanel.Dispose();
+            confirmPanel = null;
+
+            Panel behind = pausePanel ?? endPanel;
+            if (behind != null)
+            {
+                behind.Visible = true;
+                behind.BringToFront();
+            }
+
+            panelButtons.Clear();
+            panelActions.Clear();
+            panelButtons.AddRange(savedButtons);
+            panelActions.AddRange(savedActions);
+            panelIndex = savedIndex;
+            for (int i = 0; i < panelButtons.Count; i++) panelButtons[i].Active = (i == panelIndex);
+            Focus();
         }
 
         private void AddResultButton(Panel panel, string text, int y, string result)
@@ -503,47 +708,101 @@ namespace Game
             return Math.Max(current, lag - 0.008f);
         }
 
+        // ================= HUD =================
+
+        private class BarFx
+        {
+            public int PrevHp = -1;
+            public float Lag = 1f;
+            public long Hold, HitAt, HealAt;
+            public int Delta;
+        }
+
+        private void ResetFx(BarFx fx)
+        {
+            fx.PrevHp = -1;
+            fx.Lag = 1f;
+            fx.Hold = 0;
+            fx.HitAt = 0;
+            fx.HealAt = 0;
+            fx.Delta = 0;
+        }
+
+        // watches health each tick: hit -> flash + shake + trailing chunk, heal -> green glow
+        private void UpdateBarFx(BarFx fx, PlayerModel p, bool healFx)
+        {
+            int hp = p.data.GetHealth();
+            float frac = HealthFraction(p);
+
+            if (fx.PrevHp >= 0)
+            {
+                if (hp < fx.PrevHp) { fx.HitAt = now; fx.Delta = fx.PrevHp - hp; fx.Hold = now + 450; }
+                else if (hp > fx.PrevHp && healFx) fx.HealAt = now;
+            }
+            fx.PrevHp = hp;
+
+            if (frac >= fx.Lag) fx.Lag = frac;
+            else if (now >= fx.Hold) fx.Lag = Math.Max(frac, fx.Lag - 0.006f);
+        }
+
+        private void TriggerSpecial(PlayerModel p, string skill)
+        {
+            bool isP1 = p == p1;
+            string tag = isP1 ? "P1" : (vsComputer ? "CPU" : practice ? "DUMMY" : "P2");
+            callout = new Callout
+            {
+                Title = (skill ?? "SPECIAL").ToUpper() + "!",
+                Sub = tag + " - " + p.data.GetCharacter().ToUpper(),
+                Accent = isP1 ? Color.RoyalBlue : Color.Firebrick,
+                Start = now
+            };
+        }
+
+        private static Color Blend(Color a, Color b, float t)
+        {
+            t = Math.Max(0f, Math.Min(1f, t));
+            return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
+        }
+
         private void DrawHud(Graphics g)
         {
             int w = GameW;
-            Rectangle hp1 = new Rectangle(20, 15, 330, 28);
-            Rectangle hp2 = new Rectangle(w - 350, 15, 330, 28);
-            Rectangle mp1 = new Rectangle(20, 66, 200, 14);
-            Rectangle mp2 = new Rectangle(w - 220, 66, 200, 14);
+            Rectangle hp1 = new Rectangle(20, 30, 330, 26);
+            Rectangle hp2 = new Rectangle(w - 350, 30, 330, 26);
+            Rectangle mp1 = new Rectangle(20, 60, 230, 14);
+            Rectangle mp2 = new Rectangle(w - 250, 60, 230, 14);
 
-            DrawBar(g, hp1, HealthFraction(p1), lag1, Color.Gold, true);
-            DrawBar(g, hp2, HealthFraction(p2), lag2, Color.Gold, false);
-            DrawText(g, p1.data.GetHealth() + "/" + p1.data.GetMaxHealth(), hp1, hudFont, StringAlignment.Center);
-            DrawText(g, p2.data.GetHealth() + "/" + p2.data.GetMaxHealth(), hp2, hudFont, StringAlignment.Center);
+            string p2Tag = vsComputer ? "CPU" : practice ? "DUMMY" : "P2";
+            DrawText(g, "P1 - " + p1.data.GetCharacter(), new Rectangle(20, 8, 330, 20), nameFont, StringAlignment.Near);
+            DrawText(g, p2.data.GetCharacter() + " - " + p2Tag, new Rectangle(w - 350, 8, 330, 20), nameFont, StringAlignment.Far);
+
+            DrawHealthBar(g, hp1, p1, fx1, true);
+            DrawHealthBar(g, hp2, p2, fx2, false);
 
             DrawHeadTag(g, "P1", p1.data.GetCharacter(), Color.RoyalBlue, p1);
-            DrawHeadTag(g, vsComputer ? "CPU" : practice ? "DUMMY" : "P2", p2.data.GetCharacter(),
-                        Color.Firebrick, p2);
+            DrawHeadTag(g, p2Tag, p2.data.GetCharacter(), Color.Firebrick, p2);
 
-            float m1 = (float)p1.data.GetMeter() / p1.data.GetMaxMeter();
-            float m2 = (float)p2.data.GetMeter() / p2.data.GetMaxMeter();
-            DrawBar(g, mp1, m1, m1, Color.DeepSkyBlue, false);
-            DrawBar(g, mp2, m2, m2, Color.DeepSkyBlue, true);
-            DrawText(g, p1.data.GetMeter() + "/" + p1.data.GetMaxMeter(), mp1, smallFont, StringAlignment.Center);
-            DrawText(g, p2.data.GetMeter() + "/" + p2.data.GetMaxMeter(), mp2, smallFont, StringAlignment.Center);
+            DrawMeter(g, mp1, p1, false);
+            DrawMeter(g, mp2, p2, true);
 
             if (!practice)
             {
-                DrawPips(g, p1Wins, winsNeeded, 20, 48, false);
-                DrawPips(g, p2Wins, winsNeeded, w - 20, 48, true);
+                DrawPips(g, p1Wins, winsNeeded, 20, 78, false);
+                DrawPips(g, p2Wins, winsNeeded, w - 20, 78, true);
 
                 string roundText = Settings.Rounds > 1
                     ? "ROUND " + currentRound + " / " + Settings.Rounds
                     : "ROUND 1";
-                DrawText(g, roundText, new Rectangle(w / 2 - 60, 88, 120, 16), roundFont, StringAlignment.Center);
+                DrawText(g, roundText, new Rectangle(w / 2 - 60, 72, 120, 16), roundFont, StringAlignment.Center);
             }
 
-            DrawText(g, Settings.Guide("P1", Settings.P1Keys),
-                     new Rectangle(20, 84, 330, 14), smallFont, StringAlignment.Near);
+            // controls: key caps, state aware (dimmed while on cooldown / not enough meter)
+            DrawControls(g, p1, Settings.P1Keys, new Rectangle(20, 96, 330, 0));
             if (!vsComputer && !practice)
-                DrawText(g, Settings.Guide("P2", Settings.P2Keys),
-                         new Rectangle(w - 350, 84, 330, 14), smallFont, StringAlignment.Far);
-            DrawText(g, "ESC: Pause", new Rectangle(w / 2 - 40, 72, 80, 14), smallFont, StringAlignment.Center);
+                DrawControls(g, p2, Settings.P2Keys, new Rectangle(w - 350, 96, 330, 0));
+
+            var pause = new Chip { Key = "ESC", Label = "Pause", Accent = ChipGrey, Dim = 1f };
+            DrawChip(g, w / 2 - ChipWidth(g, pause) / 2, 92, pause);
 
             int secondsLeft = Math.Max(0, (int)Math.Ceiling((roundEndsAt - now) / 1000.0));
             Rectangle timerBox = new Rectangle(w / 2 - 40, 10, 80, 60);
@@ -557,6 +816,267 @@ namespace Game
                 using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
                     g.DrawString(timeText, f, color, timerBox, sf);
             }
+        }
+
+        private void DrawHealthBar(Graphics g, Rectangle r, PlayerModel p, BarFx fx, bool anchorRight)
+        {
+            float frac = Math.Max(0f, Math.Min(1f, HealthFraction(p)));
+            float lag = Math.Max(frac, Math.Min(1f, fx.Lag));
+            long hitAge = now - fx.HitAt;
+            long healAge = now - fx.HealAt;
+
+            // shake on hit, stronger for bigger hits
+            int shake = 0;
+            if (hitAge < 300)
+            {
+                float dmgFrac = fx.Delta / (float)p.data.GetMaxHealth();
+                float amp = 2f + Math.Min(5f, dmgFrac * 60f);
+                shake = (int)(Math.Sin(hitAge * 0.12) * amp * (1f - hitAge / 300f));
+            }
+
+            var state = g.Save();
+            g.TranslateTransform(shake, 0);
+
+            // colour follows health, pulses when low
+            Color fill = frac > 0.5f ? Color.Gold : frac > 0.25f ? Color.Orange : Color.OrangeRed;
+            if (frac > 0f && frac <= 0.25f)
+            {
+                float pulse = (float)((Math.Sin(now / 120.0) + 1) / 2);
+                fill = Blend(Color.OrangeRed, Color.White, pulse * 0.35f);
+            }
+
+            using (var back = new SolidBrush(Color.FromArgb(200, 20, 20, 20)))
+                g.FillRectangle(back, r);
+
+            // trailing chunk: white right after the hit, then turns red and drains
+            using (var lagBrush = new SolidBrush(hitAge < 450 ? Color.White : Color.Crimson))
+            using (var fillBrush = new SolidBrush(fill))
+            using (var shine = new SolidBrush(Color.FromArgb(55, 255, 255, 255)))
+            {
+                FillPart(g, lagBrush, r, lag, anchorRight);
+                FillPart(g, fillBrush, r, frac, anchorRight);
+                FillPart(g, shine, new Rectangle(r.X, r.Y, r.Width, r.Height / 2), frac, anchorRight);
+            }
+
+            if (hitAge < 160)
+                using (var fl = new SolidBrush(Color.FromArgb((int)(170 * (1f - hitAge / 160f)), Color.White)))
+                    g.FillRectangle(fl, r);
+            if (healAge < 600)
+                using (var fl = new SolidBrush(Color.FromArgb((int)(140 * (1f - healAge / 600f)), Color.LimeGreen)))
+                    g.FillRectangle(fl, r);
+
+            Color border = hitAge < 300 ? Color.Red : healAge < 600 ? Color.LimeGreen : Color.White;
+            using (var pen = new Pen(border, hitAge < 300 ? 3f : 1f))
+                g.DrawRectangle(pen, r);
+
+            DrawText(g, p.data.GetHealth() + " / " + p.data.GetMaxHealth(), r, hudFont, StringAlignment.Center);
+            g.Restore(state);
+        }
+
+        private void DrawMeter(Graphics g, Rectangle r, PlayerModel p, bool anchorRight)
+        {
+            var d = p.data;
+            int meter = d.GetMeter(), max = d.GetMaxMeter();
+            float frac = Math.Max(0f, Math.Min(1f, meter / (float)max));
+            bool ready = meter >= d.GetSpecialCost();
+
+            Color fill = Color.DeepSkyBlue;
+            if (ready)
+            {
+                float pulse = (float)((Math.Sin(now / 150.0) + 1) / 2);
+                fill = Blend(Color.DeepSkyBlue, Color.Gold, pulse);
+            }
+            DrawBar(g, r, frac, frac, fill, anchorRight);
+
+            // markers: where the special (gold) and heal (green) become affordable
+            DrawTick(g, r, d.GetSpecialCost() / (float)max, Color.Gold, anchorRight);
+            if (d.GetHealAmount() > 0)
+                DrawTick(g, r, d.GetHealCost() / (float)max, Color.LimeGreen, anchorRight);
+
+            string text = ready ? "SPECIAL READY  " + meter + "/" + max : meter + "/" + max;
+            DrawText(g, text, r, smallFont, StringAlignment.Center);
+        }
+
+        private void DrawTick(Graphics g, Rectangle r, float frac, Color c, bool anchorRight)
+        {
+            frac = Math.Max(0f, Math.Min(1f, frac));
+            int x = anchorRight ? r.Right - (int)(r.Width * frac) : r.Left + (int)(r.Width * frac);
+            using (var pen = new Pen(c, 2))
+                g.DrawLine(pen, x, r.Top - 2, x, r.Bottom + 2);
+        }
+
+        // ---------- controls panel ----------
+
+        private struct Chip
+        {
+            public string Key, Label;
+            public Color Accent;
+            public float Dim;
+        }
+
+        private static GraphicsPath RoundedRect(Rectangle r, int rad)
+        {
+            int d = rad * 2;
+            var path = new GraphicsPath();
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        private int KeyCapWidth(Graphics g, string key)
+        {
+            float w = g.MeasureString(key, keyFont, PointF.Empty, StringFormat.GenericTypographic).Width;
+            return Math.Max(22, (int)Math.Ceiling(w) + 12);
+        }
+
+        private int ChipWidth(Graphics g, Chip c)
+        {
+            float lw = g.MeasureString(c.Label, chipFont, PointF.Empty, StringFormat.GenericTypographic).Width;
+            return KeyCapWidth(g, c.Key) + 5 + (int)Math.Ceiling(lw);
+        }
+
+        private void DrawChip(Graphics g, int x, int y, Chip c)
+        {
+            int kw = KeyCapWidth(g, c.Key);
+            var cap = new Rectangle(x, y, kw, 18);
+            float k = c.Dim;
+
+            var st = g.Save();
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var path = RoundedRect(cap, 4))
+            {
+                using (var fill = new SolidBrush(Color.FromArgb((int)(240 * k), 34, 36, 48))) g.FillPath(fill, path);
+                using (var pen = new Pen(Color.FromArgb((int)(255 * k), c.Accent), 2)) g.DrawPath(pen, path);
+            }
+            g.Restore(st);
+
+            var tf = StringFormat.GenericTypographic;
+            float tw = g.MeasureString(c.Key, keyFont, PointF.Empty, tf).Width;
+            float ty = y + (18 - keyFont.GetHeight(g)) / 2f;
+            using (var br = new SolidBrush(Color.FromArgb((int)(255 * k), Color.White)))
+                g.DrawString(c.Key, keyFont, br, x + (kw - tw) / 2f, ty, tf);
+
+            float lx = x + kw + 5;
+            float ly = y + (18 - chipFont.GetHeight(g)) / 2f;
+            using (var sh = new SolidBrush(Color.FromArgb((int)(200 * k), Color.Black)))
+                g.DrawString(c.Label, chipFont, sh, lx + 1, ly + 1, tf);
+            using (var br = new SolidBrush(Color.FromArgb((int)(255 * k), Color.White)))
+                g.DrawString(c.Label, chipFont, br, lx, ly, tf);
+        }
+
+        private void DrawControls(Graphics g, PlayerModel p, Dictionary<string, Keys> m, Rectangle area)
+        {
+            var d = p.data;
+            int meter = d.GetMeter();
+            var chips = new List<Chip>();
+
+            chips.Add(new Chip { Key = Settings.KeyName(m["Left"]) + " / " + Settings.KeyName(m["Right"]), Label = "Move", Accent = ChipGrey, Dim = 1f });
+            chips.Add(new Chip { Key = Settings.KeyName(m["Jump"]), Label = "Jump", Accent = ChipGrey, Dim = 1f });
+            chips.Add(new Chip { Key = Settings.KeyName(m["Attack"]), Label = "Attack", Accent = ChipGrey, Dim = 1f });
+
+            bool specialReady = meter >= d.GetSpecialCost();
+            chips.Add(new Chip
+            {
+                Key = Settings.KeyName(m["Special"]),
+                Label = "Special (" + d.GetSpecialCost() + ")",
+                Accent = specialReady ? Color.Gold : ChipGrey,
+                Dim = specialReady ? 1f : 0.5f
+            });
+
+            long defCd = d.nextDefendAllowed - now;
+            chips.Add(new Chip
+            {
+                Key = Settings.KeyName(m["Defend"]),
+                Label = defCd > 0 ? "Defend " + (int)Math.Ceiling(defCd / 1000.0) + "s" : "Defend",
+                Accent = Color.Cyan,
+                Dim = defCd > 0 ? 0.5f : 1f
+            });
+
+            // only characters that actually have a heal skill get a heal key
+            if (d.GetHealAmount() > 0)
+            {
+                long healCd = d.nextHealAllowed - now;
+                bool ok = healCd <= 0 && meter >= d.GetHealCost();
+                chips.Add(new Chip
+                {
+                    Key = Settings.KeyName(m["Heal"]),
+                    Label = healCd > 0 ? "Heal " + (int)Math.Ceiling(healCd / 1000.0) + "s" : "Heal (" + d.GetHealCost() + ")",
+                    Accent = Color.LimeGreen,
+                    Dim = ok ? 1f : 0.5f
+                });
+            }
+
+            const int padX = 8, padY = 6, gap = 10, rowH = 22;
+            int n = chips.Count;
+            var xs = new int[n];
+            var rowOf = new int[n];
+            int rows = 1, cur = padX;
+            for (int i = 0; i < n; i++)
+            {
+                int cw = ChipWidth(g, chips[i]);
+                if (cur > padX && cur + cw > area.Width - padX) { rows++; cur = padX; }
+                xs[i] = cur;
+                rowOf[i] = rows - 1;
+                cur += cw + gap;
+            }
+
+            var panel = new Rectangle(area.X, area.Y, area.Width, rows * rowH + padY * 2 - 4);
+            using (var back = new SolidBrush(Color.FromArgb(150, 10, 10, 14))) g.FillRectangle(back, panel);
+            using (var pen = new Pen(Color.FromArgb(80, 255, 255, 255), 1)) g.DrawRectangle(pen, panel);
+
+            for (int i = 0; i < n; i++)
+                DrawChip(g, area.X + xs[i], area.Y + padY + rowOf[i] * rowH, chips[i]);
+        }
+
+        // ---------- big special-skill callout ----------
+
+        private void DrawCallout(Graphics g)
+        {
+            if (callout == null) return;
+            long age = Math.Max(0, now - callout.Start);
+            if (age >= CalloutMs) { callout = null; return; }
+
+            float t = age / (float)CalloutMs;
+            float fade = t < 0.7f ? 1f : 1f - (t - 0.7f) / 0.3f;
+            float pop = age < 160 ? 1.35f - 0.35f * (age / 160f) : 1f;
+
+            if (age < 120)
+                using (var fl = new SolidBrush(Color.FromArgb((int)(70 * (1f - age / 120f)), Color.White)))
+                    g.FillRectangle(fl, 0, 0, GameW, GameH);
+
+            int cy = 215;
+            var band = new Rectangle(0, cy - 55, GameW, 110);
+            using (var bb = new SolidBrush(Color.FromArgb((int)(150 * fade), 0, 0, 0)))
+                g.FillRectangle(bb, band);
+            using (var edge = new Pen(Color.FromArgb((int)(255 * fade), callout.Accent), 3))
+            {
+                g.DrawLine(edge, 0, band.Top, GameW, band.Top);
+                g.DrawLine(edge, 0, band.Bottom, GameW, band.Bottom);
+            }
+
+            using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+            using (var br = new SolidBrush(Color.FromArgb((int)(255 * fade), Color.White)))
+                g.DrawString(callout.Sub, calloutSubFont, br, new Rectangle(0, band.Top + 6, GameW, 22), sf);
+
+            var st = g.Save();
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TranslateTransform(GameW / 2f, cy + 10);
+            g.ScaleTransform(pop, pop);
+            using (var path = new GraphicsPath())
+            using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+            {
+                float em = g.DpiY * calloutFont.SizeInPoints / 72f;
+                path.AddString(callout.Title, calloutFont.FontFamily, (int)calloutFont.Style, em,
+                               new RectangleF(-GameW / 2f, -30, GameW, 60), sf);
+                using (var pen = new Pen(Color.FromArgb((int)(255 * fade), callout.Accent), 8f) { LineJoin = LineJoin.Round })
+                    g.DrawPath(pen, path);
+                using (var fillB = new SolidBrush(Color.FromArgb((int)(255 * fade), Color.Gold)))
+                    g.FillPath(fillB, path);
+            }
+            g.Restore(st);
         }
 
         private void DrawPips(Graphics g, int wins, int total, int x, int y, bool anchorRight)
@@ -584,7 +1104,7 @@ namespace Game
             int y = p.ActualHitbox.Top - h - 6;
 
             x = Math.Max(0, Math.Min(x, GameW - w));
-            y = Math.Max(100, y);
+            y = Math.Max(150, y);
 
             var r = new Rectangle(x, y, w, h);
             using (var back = new SolidBrush(Color.FromArgb(215, accent)))
@@ -644,7 +1164,7 @@ namespace Game
             int guard = 0;
             while (player.ActualHitbox.IntersectsWith(opponent.ActualHitbox) && guard++ < 600)
                 player.Left += step;
-            player.Left = Math.Max(0, Math.Min(player.Left, GameW - player.Width));
+            ClampToScreen(player);
         }
     }
 }
