@@ -252,6 +252,7 @@ namespace Game
             finally
             {
                 HurtBox = Rectangle.Empty;
+                await Task.Delay(500);
                 SetAttackState(false);
                 specialActive = false;
                 Invalidate();

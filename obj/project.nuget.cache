@@ -1,8 +1,13 @@
 {
   "version": 2,
-  "dgSpecHash": "UNW/pOZS1EY=",
+  "dgSpecHash": "5WTCxxikA0c=",
   "success": true,
-  "projectFilePath": "D:\\GameDev\\GameDev.csproj",
-  "expectedPackageFiles": [],
+  "projectFilePath": "C:\\Users\\Gabriel\\Desktop\\XMAPPBACKUP\\xampp\\htdocs\\GameGUI_Github\\Gamedev\\GameDev.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Gabriel\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.29\\microsoft.netcore.app.ref.8.0.29.nupkg.sha512",
+    "C:\\Users\\Gabriel\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.29\\microsoft.windowsdesktop.app.ref.8.0.29.nupkg.sha512",
+    "C:\\Users\\Gabriel\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.29\\microsoft.aspnetcore.app.ref.8.0.29.nupkg.sha512",
+    "C:\\Users\\Gabriel\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\8.0.29\\microsoft.netcore.app.host.win-x64.8.0.29.nupkg.sha512"
+  ],
   "logs": []
 }
