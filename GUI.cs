@@ -1022,7 +1022,7 @@ namespace Game
             float pop = age < 160 ? 1.35f - 0.35f * (age / 160f) : 1f;
 
             if (age < 120)
-                using (var fl = new SolidBrush(Color.FromArgb((int)(70 * (1f - age / 120f)), Color.White)))
+                using (var fl = new SolidBrush(Color.FromArgb((int)(70 * (1f - age / 120f)), Color.Black)))
                     g.FillRectangle(fl, 0, 0, GameW, GameH);
 
             int cy = 215;
