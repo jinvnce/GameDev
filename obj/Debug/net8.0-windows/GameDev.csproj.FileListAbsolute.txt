@@ -77,3 +77,8 @@ C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\bins-rene-shee
 C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\bins-rene-trail.png
 C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\gab-pred-blue-sheet.png
 C:\School Files\c#\GameDev\bin\Debug\net8.0-windows\assets\avatar\gab-pred-blue-trail.png
+D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\bins-rene-sheet.png
+D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\bins-rene-trail.png
+D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\gab-pred-blue-sheet.png
+D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\gab-pred-blue-trail.png
+D:\GameDev\bin\Debug\net8.0-windows\assets\avatar\Rene.jpg

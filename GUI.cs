@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using static Game.MenuForm;
+using System.Drawing.Imaging;
 
 namespace Game
 {
@@ -29,13 +30,9 @@ namespace Game
         private bool paused;
         private long pausedAt;
         private Panel pausePanel;
-
-        // keyboard navigation for the pause / end-of-match panels
         private readonly List<GameButton> panelButtons = new List<GameButton>();
         private readonly List<Action> panelActions = new List<Action>();
         private int panelIndex;
-
-        // "are you sure?" dialog that sits on top of the pause / end panel
         private Panel confirmPanel;
         private List<GameButton> savedButtons;
         private List<Action> savedActions;
@@ -47,18 +44,19 @@ namespace Game
         private readonly Font chipFont = Theme.Body(9, FontStyle.Bold);
         private readonly Font calloutFont = Theme.Display(38);
         private readonly Font calloutSubFont = Theme.Display(12);
+        private readonly Font timerFontBold = new Font(Theme.Display(28), FontStyle.Bold);
         private static readonly Color ChipGrey = Color.FromArgb(210, 210, 215);
-        private class Callout { public string Title, Sub; public Color Accent; public long Start; }
+        private class Callout { public string Title, Sub; public Color Accent; public Color Fill = Color.Gold; public long Start; }
         private Callout callout;
         private const int CalloutMs = 1100;
         private readonly Dictionary<PlayerModel, int> jumpStartX = new Dictionary<PlayerModel, int>();
         private readonly HashSet<PlayerModel> airMoved = new HashSet<PlayerModel>();
-        private readonly Font hudFont    = Theme.Body(11, FontStyle.Bold);
-        private readonly Font nameFont   = Theme.Display(11);
-        private readonly Font timerFont  = Theme.Display(28);
-        private readonly Font smallFont  = Theme.Body(8, FontStyle.Bold);
-        private readonly Font tagFont    = Theme.Display(9);
-        private readonly Font roundFont  = Theme.Display(9);
+        private readonly Font hudFont = Theme.Body(11, FontStyle.Bold);
+        private readonly Font nameFont = Theme.Display(11);
+        private readonly Font timerFont = Theme.Display(28);
+        private readonly Font smallFont = Theme.Body(8, FontStyle.Bold);
+        private readonly Font tagFont = Theme.Display(9);
+        private readonly Font roundFont = Theme.Display(9);
         private readonly Font bannerFont = Theme.Display(30);
         private int p1Wins, p2Wins;
         private int currentRound = 1;
@@ -67,7 +65,7 @@ namespace Game
         private long intermissionEnds;
         private string banner;
         private const int GameW = 800, GameH = 600;
-        private const int SpawnMargin = 100; // distance from screen edge to the character body
+        private const int SpawnMargin = 100; 
         private Image mapImage;
         private Panel endPanel;
         public FormWindowState EndState { get; private set; } = FormWindowState.Normal;
@@ -77,14 +75,14 @@ namespace Game
         {
             this.vsComputer = vsComputer;
             this.practice = practice;
-            winsNeeded = Settings.Rounds / 2 + 1;
+            winsNeeded = Settings.Rounds;
             now = Environment.TickCount64;
             roundEndsAt = now + Settings.RoundSeconds * 1000;
             p1 = new PlayerModel(p1Name, Color.Blue, "Right", "P1");
             p2 = new PlayerModel(p2Name, Color.Red, "Left", "P2");
 
             Text = "Pinoy Brawler";
-            ClientSize = new Size(GameW * 3 / 2, GameH * 3 / 2);   // 1200 x 900
+            ClientSize = new Size(GameW * 3 / 2, GameH * 3 / 2);   
             MinimumSize = SizeFromClientSize(new Size(400, 300));
             DoubleBuffered = true;
             ResizeRedraw = true;
@@ -92,7 +90,12 @@ namespace Game
             CenterToScreen();
 
             mapImage = LoadImage(mapPath);
-
+            if (mapImage != null)
+            {
+                var cached = BuildMapCache(mapImage);
+                mapImage.Dispose();
+                mapImage = cached;
+            }
             p1.SetGroundY(GameH / 2);
             p2.SetGroundY(GameH / 2);
 
@@ -101,8 +104,8 @@ namespace Game
 
             p1.SpecialUsed += skill => TriggerSpecial(p1, skill);
             p2.SpecialUsed += skill => TriggerSpecial(p2, skill);
-
-            // must come after LoadVisuals: the body width is only known once sprites are loaded
+            p1.HealUsed += skill => TriggerHeal(p1, skill);
+            p2.HealUsed += skill => TriggerHeal(p2, skill);
             ResetPositions();
 
             KeyPreview = true;
@@ -112,7 +115,7 @@ namespace Game
             gameLoop = new System.Windows.Forms.Timer { Interval = 15 };
             gameLoop.Tick += gameLoop_Tick;
             gameLoop.Start();
-            FormClosed += (s, e) => gameLoop.Stop();
+            FormClosed += (s, e) => { mapImage?.Dispose(); mapImage = null; p1.Dispose(); p2.Dispose(); };
             FormClosing += (s, e) =>
             {
                 EndState = WindowState == FormWindowState.Minimized ? FormWindowState.Normal : WindowState;
@@ -121,22 +124,17 @@ namespace Game
             FormClosed += (s, e) => { mapImage?.Dispose(); mapImage = null; };
         }
 
-        // ---------- positioning helpers ----------
-
-        // empty space between the control's left edge and the visible body
         private int SideGap(PlayerModel p)
         {
             return p.ActualHitbox.Left - p.Left;
         }
 
-        // keep the visible body (not the whole control) inside the screen
         private void ClampToScreen(PlayerModel p)
         {
             int gap = SideGap(p);
             p.Left = Math.Max(-gap, Math.Min(p.Left, GameW - p.Width + gap));
         }
 
-        // mirrored spawn: each body starts SpawnMargin px from its own edge
         private void ResetPositions()
         {
             p1.Left = SpawnMargin - SideGap(p1);
@@ -266,7 +264,7 @@ namespace Game
                 string text = p1Wins > p2Wins
                     ? "PLAYER 1 WINS!"
                     : (vsComputer ? "COMPUTER WINS!" : "PLAYER 2 WINS!");
-                if (Settings.Rounds > 1) text += "\n" + p1Wins + " - " + p2Wins;
+                if (winsNeeded > 1) text += "\n" + p1Wins + " - " + p2Wins;
                 EndGame(text);
                 return;
             }
@@ -417,7 +415,9 @@ namespace Game
             g.TranslateTransform(offX, offY);
             g.ScaleTransform(scale, scale);
             g.SetClip(new Rectangle(0, 0, GameW, GameH));
-
+            g.InterpolationMode = InterpolationMode.Low;
+            g.CompositingQuality = CompositingQuality.HighSpeed;
+            g.PixelOffsetMode = PixelOffsetMode.HighSpeed;
             if (mapImage != null) g.DrawImage(mapImage, new Rectangle(0, 0, GameW, GameH));
             else g.Clear(Color.FromArgb(30, 30, 30));
 
@@ -430,7 +430,6 @@ namespace Game
                 DrawText(g, banner, new Rectangle(0, 220, GameW, 80), bannerFont, StringAlignment.Center);
         }
 
-        // While the pause or end panel is open, keys drive the panel instead of the fighters
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
             if ((paused || gameOver) && panelButtons.Count > 0)
@@ -467,7 +466,7 @@ namespace Game
         private void MovePanel(int d)
         {
             int n = panelButtons.Count;
-            panelIndex = ((panelIndex + d) % n + n) % n;   // wrap around
+            panelIndex = ((panelIndex + d) % n + n) % n;   
             for (int i = 0; i < n; i++) panelButtons[i].Active = (i == panelIndex);
         }
 
@@ -607,7 +606,6 @@ namespace Game
             panel.Controls.Add(btn);
         }
 
-        // button that asks "are you sure?" before leaving the match
         private void AddConfirmButton(Panel panel, string text, int y, string result)
         {
             AddPanelButton(panel, text, y, () => ShowConfirm(result));
@@ -640,7 +638,6 @@ namespace Game
                     break;
             }
 
-            // remember the panel underneath so Cancel can bring it back exactly as it was
             savedButtons = new List<GameButton>(panelButtons);
             savedActions = new List<Action>(panelActions);
             savedIndex = panelIndex;
@@ -660,7 +657,6 @@ namespace Game
             };
             confirmPanel.Controls.Add(msg);
 
-            // "No" comes first so it is the default choice
             AddPanelButton(confirmPanel, "No, go back", 176, CancelConfirm);
             AddPanelButton(confirmPanel, yesText, 232, () => { Result = result; Close(); });
 
@@ -707,9 +703,6 @@ namespace Game
             if (current >= lag) return current;
             return Math.Max(current, lag - 0.008f);
         }
-
-        // ================= HUD =================
-
         private class BarFx
         {
             public int PrevHp = -1;
@@ -728,7 +721,6 @@ namespace Game
             fx.Delta = 0;
         }
 
-        // watches health each tick: hit -> flash + shake + trailing chunk, heal -> green glow
         private void UpdateBarFx(BarFx fx, PlayerModel p, bool healFx)
         {
             int hp = p.data.GetHealth();
@@ -790,13 +782,10 @@ namespace Game
                 DrawPips(g, p1Wins, winsNeeded, 20, 78, false);
                 DrawPips(g, p2Wins, winsNeeded, w - 20, 78, true);
 
-                string roundText = Settings.Rounds > 1
-                    ? "ROUND " + currentRound + " / " + Settings.Rounds
-                    : "ROUND 1";
-                DrawText(g, roundText, new Rectangle(w / 2 - 60, 72, 120, 16), roundFont, StringAlignment.Center);
+                string roundText = "ROUND " + currentRound + " - FIRST TO " + winsNeeded;
+                DrawText(g, roundText, new Rectangle(w / 2 - 100, 72, 200, 16), roundFont, StringAlignment.Center);
             }
 
-            // controls: key caps, state aware (dimmed while on cooldown / not enough meter)
             DrawControls(g, p1, Settings.P1Keys, new Rectangle(20, 96, 330, 0));
             if (!vsComputer && !practice)
                 DrawControls(g, p2, Settings.P2Keys, new Rectangle(w - 350, 96, 330, 0));
@@ -809,13 +798,11 @@ namespace Game
             using (var back = new SolidBrush(Color.FromArgb(200, 20, 20, 20)))
                 g.FillRectangle(back, timerBox);
             g.DrawRectangle(Pens.White, timerBox);
-            using (var f = new Font(timerFont, FontStyle.Bold))
-            {
-                string timeText = practice ? "\u221E" : secondsLeft.ToString("00");
-                var color = (!practice && secondsLeft <= 10) ? Brushes.Red : Brushes.White;
-                using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                    g.DrawString(timeText, f, color, timerBox, sf);
-            }
+            string timeText = practice ? "\u221E" : secondsLeft.ToString("00");
+            var color = (!practice && secondsLeft <= 10) ? Brushes.Red : Brushes.White;
+            using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                g.DrawString(timeText, timerFontBold, color, timerBox, sf);
+
         }
 
         private void DrawHealthBar(Graphics g, Rectangle r, PlayerModel p, BarFx fx, bool anchorRight)
@@ -825,7 +812,6 @@ namespace Game
             long hitAge = now - fx.HitAt;
             long healAge = now - fx.HealAt;
 
-            // shake on hit, stronger for bigger hits
             int shake = 0;
             if (hitAge < 300)
             {
@@ -837,7 +823,6 @@ namespace Game
             var state = g.Save();
             g.TranslateTransform(shake, 0);
 
-            // colour follows health, pulses when low
             Color fill = frac > 0.5f ? Color.Gold : frac > 0.25f ? Color.Orange : Color.OrangeRed;
             if (frac > 0f && frac <= 0.25f)
             {
@@ -848,7 +833,6 @@ namespace Game
             using (var back = new SolidBrush(Color.FromArgb(200, 20, 20, 20)))
                 g.FillRectangle(back, r);
 
-            // trailing chunk: white right after the hit, then turns red and drains
             using (var lagBrush = new SolidBrush(hitAge < 450 ? Color.White : Color.Crimson))
             using (var fillBrush = new SolidBrush(fill))
             using (var shine = new SolidBrush(Color.FromArgb(55, 255, 255, 255)))
@@ -888,7 +872,6 @@ namespace Game
             }
             DrawBar(g, r, frac, frac, fill, anchorRight);
 
-            // markers: where the special (gold) and heal (green) become affordable
             DrawTick(g, r, d.GetSpecialCost() / (float)max, Color.Gold, anchorRight);
             if (d.GetHealAmount() > 0)
                 DrawTick(g, r, d.GetHealCost() / (float)max, Color.LimeGreen, anchorRight);
@@ -904,8 +887,6 @@ namespace Game
             using (var pen = new Pen(c, 2))
                 g.DrawLine(pen, x, r.Top - 2, x, r.Bottom + 2);
         }
-
-        // ---------- controls panel ----------
 
         private struct Chip
         {
@@ -928,15 +909,15 @@ namespace Game
 
         private int KeyCapWidth(Graphics g, string key)
         {
-            float w = g.MeasureString(key, keyFont, PointF.Empty, StringFormat.GenericTypographic).Width;
-            return Math.Max(22, (int)Math.Ceiling(w) + 12);
+            return Math.Max(22, (int)Math.Ceiling(TextW(g, key, keyFont)) + 12);
         }
+
 
         private int ChipWidth(Graphics g, Chip c)
         {
-            float lw = g.MeasureString(c.Label, chipFont, PointF.Empty, StringFormat.GenericTypographic).Width;
-            return KeyCapWidth(g, c.Key) + 5 + (int)Math.Ceiling(lw);
+            return KeyCapWidth(g, c.Key) + 5 + (int)Math.Ceiling(TextW(g, c.Label, chipFont));
         }
+
 
         private void DrawChip(Graphics g, int x, int y, Chip c)
         {
@@ -954,7 +935,7 @@ namespace Game
             g.Restore(st);
 
             var tf = StringFormat.GenericTypographic;
-            float tw = g.MeasureString(c.Key, keyFont, PointF.Empty, tf).Width;
+            float tw = TextW(g, c.Key, keyFont);
             float ty = y + (18 - keyFont.GetHeight(g)) / 2f;
             using (var br = new SolidBrush(Color.FromArgb((int)(255 * k), Color.White)))
                 g.DrawString(c.Key, keyFont, br, x + (kw - tw) / 2f, ty, tf);
@@ -995,7 +976,6 @@ namespace Game
                 Dim = defCd > 0 ? 0.5f : 1f
             });
 
-            // only characters that actually have a heal skill get a heal key
             if (d.GetHealAmount() > 0)
             {
                 long healCd = d.nextHealAllowed - now;
@@ -1030,8 +1010,6 @@ namespace Game
             for (int i = 0; i < n; i++)
                 DrawChip(g, area.X + xs[i], area.Y + padY + rowOf[i] * rowH, chips[i]);
         }
-
-        // ---------- big special-skill callout ----------
 
         private void DrawCallout(Graphics g)
         {
@@ -1073,7 +1051,7 @@ namespace Game
                                new RectangleF(-GameW / 2f, -30, GameW, 60), sf);
                 using (var pen = new Pen(Color.FromArgb((int)(255 * fade), callout.Accent), 8f) { LineJoin = LineJoin.Round })
                     g.DrawPath(pen, path);
-                using (var fillB = new SolidBrush(Color.FromArgb((int)(255 * fade), Color.Gold)))
+                using (var fillB = new SolidBrush(Color.FromArgb((int)(255 * fade), callout.Fill)))
                     g.FillPath(fillB, path);
             }
             g.Restore(st);
@@ -1096,8 +1074,7 @@ namespace Game
         private void DrawHeadTag(Graphics g, string label, string name, Color accent, PlayerModel p)
         {
             string text = label + " - " + name;
-            SizeF size = g.MeasureString(text, tagFont);
-            int w = (int)size.Width + 16;
+            int w = (int)Math.Ceiling(TextW(g, text, tagFont)) + 24;
             int h = 20;
 
             int x = CenterX(p) - w / 2;
@@ -1166,5 +1143,41 @@ namespace Game
                 player.Left += step;
             ClampToScreen(player);
         }
+        private Image BuildMapCache(Image src)
+        {
+            var bmp = new Bitmap(GameW * 3 / 2, GameH * 3 / 2, PixelFormat.Format32bppPArgb);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.DrawImage(src, 0, 0, bmp.Width, bmp.Height);
+            }
+            return bmp;
+        }
+        private readonly Dictionary<string, float> textWidths = new Dictionary<string, float>();
+
+        private float TextW(Graphics g, string s, Font f)
+        {
+            string key = f.Name + f.SizeInPoints + f.Style + "|" + s;
+            if (!textWidths.TryGetValue(key, out float w))
+            {
+                w = g.MeasureString(s, f, PointF.Empty, StringFormat.GenericTypographic).Width;
+                textWidths[key] = w;
+            }
+            return w;
+        }
+
+private void TriggerHeal(PlayerModel p, string skill)
+{
+    bool isP1 = p == p1;
+    string tag = isP1 ? "P1" : (vsComputer ? "CPU" : practice ? "DUMMY" : "P2");
+    callout = new Callout
+    {
+        Title = (string.IsNullOrEmpty(skill) ? "HEAL" : skill.ToUpper()) + "!",
+        Sub = tag + " - " + p.data.GetCharacter().ToUpper(),
+        Accent = isP1 ? Color.RoyalBlue : Color.Firebrick,
+        Fill = Color.LimeGreen,
+        Start = now
+    };
+}
     }
 }

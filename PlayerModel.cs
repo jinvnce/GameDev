@@ -4,19 +4,20 @@ using System.Windows.Forms;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 
 namespace Game
 {
     public class PlayerModel : Control
     {
-        public Players data {get; private set;}
-        public string direction {get; private set;}
-        public bool attacking {get; private set;}
-        public string playerNum {get; private set;}
-        public bool OnAir {get; private set;}
-        public float VelocitY {get; private set;}
-        public int GroundY {get; private set;}
-        private Color ModelColor {get; set;}
+        public Players data { get; private set; }
+        public string direction { get; private set; }
+        public bool attacking { get; private set; }
+        public string playerNum { get; private set; }
+        public bool OnAir { get; private set; }
+        public float VelocitY { get; private set; }
+        public int GroundY { get; private set; }
+        private Color ModelColor { get; set; }
         private const float BodyFit = 1.0f;
         public event Action<string> SpecialUsed;
         private int BodyWidth
@@ -31,9 +32,9 @@ namespace Game
         }
 
         public Rectangle ActualHitbox => new Rectangle(Left + (Width - BodyWidth) / 2, Top + BarArea, BodyWidth, Height - BarArea);
-        public Rectangle HurtBox {get; private set;}
+        public Rectangle HurtBox { get; private set; }
         private const int BasicReach = 100;
-        public bool DefenseActive{get; private set;}
+        public bool DefenseActive { get; private set; }
         private Image standImg, walkImg, attackImg;
         private bool spritesFaceRight = true;
         private bool walkFrame;
@@ -46,17 +47,20 @@ namespace Game
         private const int PopupMs = 1000;
         private Image jumpImg;
 
-        // sprite sheet
         private Image sheet;
         private const int CW = 90, CH = 130;
-        private int[] RowFrames = { 4, 8, 6, 4, 5, 0 };        
+        private int[] RowFrames = { 4, 8, 6, 4, 5, 0 };
         private int walkIndex;
         private bool specialAnim;
         private long attackAnimStart, attackAnimEnd, healAnimStart, healAnimEnd;
-
+        private bool wasMoving;
+        private long walkStart;
+        private const int WalkFrameMs = 80;
+        public event Action<string> HealUsed;
         public void LoadSheet(string path, bool facesRight = true)
         {
-            sheet = Image.FromFile(path);
+            sheet?.Dispose();
+            sheet = LoadFast(path);
             spritesFaceRight = facesRight;
             RowFrames = CountFrames(sheet);
         }
@@ -86,7 +90,7 @@ namespace Game
         private long landSquashUntil;
         private readonly Font popupFont = new Font("Segoe UI", 9, FontStyle.Bold);
 
-        public PlayerModel(string name,Color ModelColor, string dir, string player)
+        public PlayerModel(string name, Color ModelColor, string dir, string player)
         {
             data = new Special_List().CreatePlayer(name);
             this.ModelColor = ModelColor;
@@ -213,7 +217,7 @@ namespace Game
                 skillName = data.GetSpecialName();
                 data.TrySpecialAttack();
                 specialActive = true;
-                SpecialUsed?.Invoke(skillName); 
+                SpecialUsed?.Invoke(skillName);
             }
             else return;
 
@@ -270,6 +274,7 @@ namespace Game
             }
             int before = data.GetHealth();
             data.TryHeal(now);
+            HealUsed?.Invoke(data.GetHealName());
             healAnimStart = Environment.TickCount64;
             healAnimEnd = healAnimStart + 800;
             ShowPopup("+" + (data.GetHealth() - before) + " HP", Color.LimeGreen);
@@ -278,11 +283,11 @@ namespace Game
 
         public void LoadSprites(string stand, string walk, string attack, string special, string jump = null, bool facesRight = true)
         {
-            standImg = Image.FromFile(stand);
-            walkImg = Image.FromFile(walk);
-            attackImg = Image.FromFile(attack);
-            specialImg = Image.FromFile(special);
-            jumpImg = (jump != null && System.IO.File.Exists(jump)) ? Image.FromFile(jump) : null;
+            standImg = LoadFast(stand);
+            walkImg = LoadFast(walk);
+            attackImg = LoadFast(attack);
+            specialImg = LoadFast(special);
+            jumpImg = (jump != null && System.IO.File.Exists(jump)) ? LoadFast(jump) : null;
             spritesFaceRight = facesRight;
         }
 
@@ -294,25 +299,21 @@ namespace Game
         public void UpdateAnimation()
         {
             long n = Environment.TickCount64;
-            int removed = popups.RemoveAll(p => n - p.Start >= PopupMs);
-            if (removed > 0 || popups.Count > 0) Invalidate();
+            popups.RemoveAll(p => n - p.Start >= PopupMs);
 
             if (IsMoving)
             {
-                frameCounter++;
-                if (frameCounter >= 5)
-                {
-                    frameCounter = 0;
-                    walkIndex = (walkIndex + 1) % RowFrames[1];
-                    walkFrame = !walkFrame;
-                    Invalidate();
-                }
+                if (!wasMoving) walkStart = n;
+                long step = (n - walkStart) / WalkFrameMs;
+                walkIndex = (int)(step % Math.Max(1, RowFrames[1]));
+                walkFrame = step % 2 == 1;
             }
-            else if (walkIndex != 0 || walkFrame)
+            else
             {
-                walkIndex = 0; walkFrame = false; frameCounter = 0; Invalidate();
+                walkIndex = 0;
+                walkFrame = false;
             }
-            if (n < attackAnimEnd || n < healAnimEnd || OnAir) Invalidate();
+            wasMoving = IsMoving;
         }
 
         private Image GetCurrentSprite()
@@ -445,5 +446,30 @@ namespace Game
                 }
             }
         }
+        private static Bitmap LoadFast(string path)
+        {
+            using (var raw = Image.FromFile(path))
+            {
+                var bmp = new Bitmap(raw.Width, raw.Height, PixelFormat.Format32bppPArgb);
+                using (var g = Graphics.FromImage(bmp))
+                {
+                    g.CompositingMode = CompositingMode.SourceCopy;
+                    g.DrawImage(raw, 0, 0, raw.Width, raw.Height);
+                }
+                return bmp;
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                sheet?.Dispose(); standImg?.Dispose(); walkImg?.Dispose();
+                attackImg?.Dispose(); specialImg?.Dispose(); jumpImg?.Dispose();
+                popupFont.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
     }
 }

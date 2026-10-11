@@ -88,9 +88,9 @@ namespace Game
         private readonly List<GameButton> navButtons = new List<GameButton>();
         private readonly List<Action> navActions = new List<Action>();
         private int navIndex;        
-        private int gridCount;       // buttons laid out in 2 columns at the start of the list (Controls screen)
-        private Action lastScreen;   // used to reset the selection when the screen changes
-        private Action goBack;       // what Esc does on the current screen
+        private int gridCount;       
+        private Action lastScreen;   
+        private Action goBack;       
         private readonly System.Windows.Forms.Timer resizeTimer = new System.Windows.Forms.Timer { Interval = 120 };
 
         private float UI { get { return Math.Max(0.1f, Math.Min(ClientSize.Width / (float)VW, ClientSize.Height / (float)VH)); } }
@@ -132,7 +132,6 @@ namespace Game
             ShowMainMenu();
         }
 
-        // Bakes a dark overlay into the background image once, so text on top stays readable
         private static Image Darken(Image src, int alpha)
         {
             if (src == null) return null;
@@ -171,7 +170,6 @@ namespace Game
             return true;
         }
 
-        // Tab / Shift+Tab / arrows to move, Enter or Space to press, Esc to go back
         private bool HandleMenuKey(Keys keyData)
         {
             if (selectScreen != null || navButtons.Count == 0) return false;
@@ -216,9 +214,6 @@ namespace Game
             for (int i = 0; i < n; i++) navButtons[i].Active = (i == navIndex);
         }
 
-        // ---------- "are you sure?" screen ----------
-
-        // Shows a confirmation screen. "No" (and Esc) return to `back`, with the same button selected as before.
         private void AskConfirm(string message, string yesText, Action onYes, Action back)
         {
             BuildConfirm(message, yesText, onYes, back, navIndex);
@@ -227,13 +222,13 @@ namespace Game
         private void BuildConfirm(string message, string yesText, Action onYes, Action back, int keep)
         {
             Action cancel = () => { back(); SelectNav(keep); };
-            redraw = () => BuildConfirm(message, yesText, onYes, back, keep);   // survives window resizes
+            redraw = () => BuildConfirm(message, yesText, onYes, back, keep);  
             goBack = cancel;
             Clear();
 
             AddTitle("Are you sure?", 130, 28);
             AddMessage(message, 220, 90, 14);
-            AddButton("No, go back", 340, cancel);   // first = selected by default, the safe choice
+            AddButton("No, go back", 340, cancel);   
             AddButton(yesText, 405, onYes);
         }
 
@@ -244,7 +239,6 @@ namespace Game
             for (int k = 0; k < navButtons.Count; k++) navButtons[k].Active = (k == navIndex);
         }
 
-        // multi-line, outlined text block (wraps inside its box)
         private void AddMessage(string text, int y, int h, float size)
         {
             var label = new OutlineLabel
@@ -364,7 +358,7 @@ namespace Game
             navButtons.Clear();
             navActions.Clear();
             gridCount = 0;
-            if (redraw != lastScreen) { navIndex = 0; lastScreen = redraw; }   // new screen -> start at the top
+            if (redraw != lastScreen) { navIndex = 0; lastScreen = redraw; }   
             foreach (Control c in Controls.Cast<Control>().ToList())
             {
                 Controls.Remove(c);
@@ -398,8 +392,7 @@ namespace Game
             {
                 Text = text,
                 Font = Theme.Body(size * UI, FontStyle.Bold),
-                ForeColor = Color.FromArgb(235, 235, 235),   // brighter than Theme.Muted so it reads on the background
-                OutlineWidth = Math.Max(2, S(3)),
+                ForeColor = Color.FromArgb(235, 235, 235),   
                 AutoSize = false,
                 Size = new Size(S(w), (int)(size * 2.2f * UI)),
                 Location = new Point(SX(x), SY(y))
@@ -425,7 +418,7 @@ namespace Game
             navButtons.Add(btn);
             navActions.Add(onClick);
             btn.Active = bindAction == null && idx == navIndex;
-            btn.Click += (s, e) => { navIndex = idx; onClick(); };   // mouse clicks move the selection too
+            btn.Click += (s, e) => { navIndex = idx; onClick(); };   
             Controls.Add(btn);
             return btn;
         }
@@ -499,7 +492,7 @@ namespace Game
                         }
                     }
                 }
-                catch { }   // bad file -> keep the defaults
+                catch { }   
             }
 
             public static void ResetKeys()
@@ -523,7 +516,6 @@ namespace Game
                 P2Keys["Heal"] = Keys.I;
             }
 
-            // Sets a key. If another action already uses it, that action gets the old key (swap).
             public static void Assign(int player, string action, Keys k)
             {
                 var mine = player == 1 ? P1Keys : P2Keys;
@@ -549,7 +541,6 @@ namespace Game
                 return s;
             }
 
-            // Short controls line for the in-game HUD
             public static string Guide(string tag, Dictionary<string, Keys> m)
             {
                 return tag + ":  " + KeyName(m["Left"]) + "/" + KeyName(m["Right"]) + " Move   "
@@ -614,7 +605,7 @@ namespace Game
             redraw = ShowControls;
             goBack = ShowOptions;
             Clear();
-            gridCount = Settings.Actions.Length * 2;   // P1/P2 binding buttons come first, two per row
+            gridCount = Settings.Actions.Length * 2;  
             AddTitle("Controls", 15, 24);
 
             AddTextAt("PLAYER 1", 40, 75, 300, 12);

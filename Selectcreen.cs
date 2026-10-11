@@ -6,6 +6,7 @@ using System.Drawing.Imaging;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using static Game.Theme;
 
 namespace Game
 {
@@ -84,7 +85,6 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
             bounds[name] = bmp != null ? OpaqueBounds(bmp) : Rectangle.Empty;
         }
 
-        // stats shown on the info cards (same data the match uses)
         private void LoadInfo()
         {
             foreach (string c in chars)
@@ -229,7 +229,6 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
             DrawText(g, "SELECT", titleFont, Theme.Text, new Rectangle(250, 0, 300, 42), StringAlignment.Center);
         }
 
-        // 1 P1  >  2 P2  >  3 STAGE : shows where you are in the flow
         private void DrawSteps(Graphics g)
         {
             string[] labels = { "1  P1", "2  " + p2Badge, "3  STAGE" };
@@ -287,7 +286,6 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
                 }
                 else
                 {
-                    // empty slot: clearly "not available yet" instead of looking broken
                     DrawLock(g, r, Color.FromArgb(150, 150, 155, 165));
                     DrawText(g, "COMING SOON", soonFont, Color.FromArgb(170, 170, 178), new Rectangle(r.X, r.Bottom - 20, r.Width, 16), StringAlignment.Center);
                 }
@@ -312,8 +310,8 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
 
             int bw = r.Width / 3, bh = (int)(bw * 0.8f);
             int cx = r.X + r.Width / 2;
-            int top = r.Y + r.Height / 2 - bh / 2 - 4;   // top edge of the lock body
-            int sw = bw * 2 / 3;                          // shackle width
+            int top = r.Y + r.Height / 2 - bh / 2 - 4;   
+            int sw = bw * 2 / 3;                          
 
             using (var pen = new Pen(c, 3f))
                 g.DrawArc(pen, cx - sw / 2, top - sw / 2, sw, sw, 180, 180);
@@ -399,12 +397,10 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
     int nameW = dmgX - nameX - 4;
     int y = card.Y + 4;
 
-    // column headers
     DrawFlat(g, "DMG",  infoLabelFont, label, new Rectangle(dmgX,  y, dmgW,  headH), StringAlignment.Far);
     DrawFlat(g, "COST", infoLabelFont, label, new Rectangle(costX, y, costW, headH), StringAlignment.Far);
     y += headH;
 
-    // HP
     DrawFlat(g, "HP", infoLabelFont, label, new Rectangle(x, y, labelW, rowH), StringAlignment.Near);
     var bar = new Rectangle(nameX, y + 5, dmgX - nameX - 8, 12);
     using (var bb = new SolidBrush(Color.FromArgb(200, 20, 20, 20))) g.FillRectangle(bb, bar);
@@ -414,21 +410,18 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
     DrawFlat(g, d.GetMaxHealth().ToString(), infoValueFont, value,
              new Rectangle(dmgX, y, dmgW + costW, rowH), StringAlignment.Far);
 
-    // BASIC
     y += rowH;
     DrawFlat(g, "BASIC", infoLabelFont, label, new Rectangle(x, y, labelW, rowH), StringAlignment.Near);
     DrawFit(g, d.GetBasicName(), infoValueFont, value, new Rectangle(nameX, y, nameW, rowH));
     DrawFlat(g, d.GetBasicDamage().ToString(), infoValueFont, value, new Rectangle(dmgX, y, dmgW, rowH), StringAlignment.Far);
     DrawFlat(g, "-", infoValueFont, Theme.Muted, new Rectangle(costX, y, costW, rowH), StringAlignment.Far);
 
-    // SPECIAL
     y += rowH;
     DrawFlat(g, "SPECIAL", infoLabelFont, Color.Gold, new Rectangle(x, y, labelW, rowH), StringAlignment.Near);
     DrawFit(g, d.GetSpecialName(), infoValueFont, value, new Rectangle(nameX, y, nameW, rowH));
     DrawFlat(g, d.GetSpecialDamage().ToString(), infoValueFont, value, new Rectangle(dmgX, y, dmgW, rowH), StringAlignment.Far);
     DrawFlat(g, d.GetSpecialCost().ToString(), infoValueFont, Color.Gold, new Rectangle(costX, y, costW, rowH), StringAlignment.Far);
 
-    // HEAL
     y += rowH;
     bool heals = d.GetHealAmount() > 0;
     Color hc = heals ? Color.LimeGreen : Theme.Muted;
@@ -466,7 +459,6 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
                 DrawText(g, System.IO.Path.GetFileNameWithoutExtension(maps[mapIdx]), smallFont, Theme.Text, cap, StringAlignment.Center);
             }
 
-            // not active yet: dim it so it does not look clickable
             if (phase < 3)
                 using (var dim = new SolidBrush(Color.FromArgb(120, 0, 0, 0)))
                     g.FillRectangle(dim, r);
@@ -496,7 +488,6 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
     string text = phase == 1 ? "P1: CHOOSE YOUR FIGHTER"
                 : phase == 2 ? p2Prompt
                 : "CHOOSE THE STAGE";
-    // below the cards (they end at y=476), so nothing can overlap
     DrawText(g, text, promptFont, Theme.Text, new Rectangle(0, 480, W, 30), StringAlignment.Center);
 
     string help = phase < 3
@@ -550,7 +541,6 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
             }
         }
 
-        // text with a soft drop shadow
         private static void DrawText(Graphics g, string text, Font f, Color c, Rectangle r, StringAlignment align)
         {
             using (var sf = new StringFormat
@@ -568,7 +558,6 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
             }
         }
 
-        // plain text, no shadow (for dark text on bright fills and for dense card rows)
         private static void DrawFlat(Graphics g, string text, Font f, Color c, Rectangle r, StringAlignment align)
         {
             using (var sf = new StringFormat
@@ -581,7 +570,6 @@ private readonly Font infoValueFont = Theme.Body(10, FontStyle.Bold);
             using (var br = new SolidBrush(c))
                 g.DrawString(text, f, br, r, sf);
         }
-        // draws left-aligned text, shrinking the font (down to 7pt) until it fits the width
 private static void DrawFit(Graphics g, string text, Font f, Color c, Rectangle r)
 {
     float size = f.Size;
@@ -630,14 +618,13 @@ private static void DrawFit(Graphics g, string text, Font f, Color c, Rectangle 
             SetIdx(ni);
         }
 
-        // Tab / Shift+Tab: next or previous fighter (including the "?" random tile), or next stage in phase 3
         private void Cycle(int d)
         {
             if (phase == 3) { ChangeMap(d); return; }
 
-            int count = chars.Count + 1;                 // fighters + Random
+            int count = chars.Count + 1;                 
             int idx = phase == 1 ? p1Idx : p2Idx;
-            SetIdx((idx + d + count) % count);           // wraps around
+            SetIdx((idx + d + count) % count);           
         }
 
         private void SetIdx(int i)

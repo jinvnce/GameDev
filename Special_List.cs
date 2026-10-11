@@ -22,14 +22,14 @@ namespace Game
 
         public Special_List()
         {
-            names          = new[] { "Ken", "Ren", "Mira", "Thorne", "Vex", "Elowen", "Rene"};
+            names          = new[] { "Coach", "Ren", "Mira", "Thorne", "Vex", "Elowen", "Rene"};
             classTypes     = new[] { "Fighter", "Fighter", "Mage", "Tank", "Assassin", "Support", "Support"};
             resourceTypes  = new[] { "Energy", "Energy", "Mana", "Energy", "Energy", "Mana", "Mana"};
             maxHealths     = new[] { 1000, 1000, 1080, 1300, 900,              850,                1500};
             maxMeters      = new[] { 15,                 15,                 12,              16,                  10,              12 ,                 100};
             basicNames     = new[] { "Straight Punch",   "Roundhouse Kick",  "Arcane Bolt",   "Shield Bash",      "Quick Slash",   "Spirit Bolt" ,     "Dribble ni Bobet"};
             basicDamages   = new[] { 50,                 50,                 50,               50,                  50,              50,       50};
-            specialNames   = new[] { "Shoryuken",        "Tatsumaki Storm",  "Meteor Surge",  "Earthquake Slam",  "Shadow Strike", "Sanctified Blast" ,     "Dunk ni Bobet"};
+            specialNames   = new[] { "Shoryuken",        "Tatsumaki Storm",  "Meteor Surge",  "Earthquake Slam",  "Shadow Strike", "Sanctified Blast" ,     "Shoot ni Bobet"};
             specialCosts   = new[] { 5,                  7,                  6,               8,                  4,               5,         20};
             specialDamages = new[] { 75,                 85,                 90,              80,                 70,              80,         150};
             healNames      = new[] { "None",             "None",             "None",          "None",             "None",          "Mending Light", "Bituin ng Mindanao"};

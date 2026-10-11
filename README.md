@@ -482,5 +482,5 @@ git switch
 git merge
 ```
 
-### GIT HARD RESET
+# GIT HARD RESET
 git reset --hard
